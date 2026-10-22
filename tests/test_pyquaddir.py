@@ -51,6 +51,13 @@ class TestPyQuadDirCore(unittest.TestCase):
             self.assertGreater(len(data), 100)
             self.assertEqual(data[:4], b"\x00\x00\x01\x00")
 
+    def test_v22_zoom_wheel_order_and_view_modes(self) -> None:
+        self.assertEqual(len(pyquaddir.ZOOM_WHEEL_ORDER), 8)
+        self.assertEqual(pyquaddir.ZOOM_WHEEL_ORDER[0], "details")
+        self.assertEqual(pyquaddir.ZOOM_WHEEL_ORDER[-1], "extra_large_icons")
+        for mode in pyquaddir.ZOOM_WHEEL_ORDER:
+            self.assertIn(mode, pyquaddir.VIEW_MODE_LABELS)
+
 
 if __name__ == "__main__":
     unittest.main()

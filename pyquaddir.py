@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-PyQuadDir Desktop Explorer v2.0 (Quad-View Multi-Tab File Manager for Windows)
+r"""
+PyQuadDir Desktop Explorer v2.2 (Quad-View Multi-Tab File Manager for Windows)
 ==============================================================================
 실제 Windows 로컬 드라이브(C:\, D:\ 등)와 파일 시스템을 직접 제어하는
 데스크톱 4분할(Quad) 다중 탭 파일 탐색기입니다.
@@ -9,21 +9,21 @@ PyQuadDir Desktop Explorer v2.0 (Quad-View Multi-Tab File Manager for Windows)
 
 [트리플 엔진 지원 — MIT 라이선스 호환]
 - 기본 Qt 엔진 (PySide6 / PyQt6 자동 감지): OS 네이티브 파일 아이콘, 실시간 이미지 썸네일,
-  외부 Windows 탐색기 양방향 드래그 앤 드롭, 고해상도 다크/라이트 테마 스타일시트 지원
+  고시인성 Windows 11 벡터 아이콘(QPainter), Ctrl+마우스 휠 8단계 뷰/썸네일 줌 전환
 - 내장 폴백 엔진 (Tkinter ttk): 외부 패키지 설치 없이 Python 표준 라이브러리만으로도 즉시 구동
 
-[v2.0 주요 업데이트]
-1. 상단 메뉴바 컴팩트화 & 즐겨찾기 전용 바 확장:
-   - [📐 레이아웃 ▾], [💽 드라이브 ▾]를 드롭다운 메뉴로 통합하여 상단 즐겨찾기(⭐) 수납 공간 대폭 확대
-2. Windows 11 탐색기 스타일 명령 바 탑재:
-   - [⊕ 새로 만들기 ▾] | [✂️ 잘라내기] [📋 복사] [📥 붙여넣기] [✏️ 이름 바꾸기] [📤 다른 패널로 전송 ▾] [🗑️ 삭제]
-   - [⇅ 정렬 ▾] (이름, 수정한 날짜, 유형, 크기, 확장자, 만든 날짜 / 오름차순·내림차순 / 분류 방법 그룹화)
-   - [⊞ 보기 ▾] (아주 큰 아이콘, 큰 아이콘, 보통 아이콘, 작은 아이콘, 목록, 자세히, 타일, 내용 + 표시 설정)
-   - [◧ 미리 보기] & [◨ 세부 정보] 우측 사이드 패널 토글 (이미지 썸네일·해상도 및 텍스트/코드 내용 실시간 프리뷰)
-3. 전체 선택(Ctrl+A) 시 상위 폴더('..') 선택 자동 제외:
-   - Ctrl+A 또는 드래그 다중 선택 시 '📁 .. (상위 폴더)' 항목이 선택되지 않도록 보호
-4. 실제 이미지 썸네일(Thumbnail) 캐시 렌더링:
-   - 아이콘/타일/내용 보기 모드에서 사진·이미지 파일(.png, .jpg, .webp, .gif, .bmp, .svg, .ico)의 실제 썸네일 표시
+[v2.2 주요 업데이트]
+1. 고시인성 벡터 아이콘(QPainter QIcon) 렌더링 & 아이콘 크기 확대:
+   - 작아서 보이지 않던 특수문자(⊕, ⇅, ⊞, ◧, ◨, ◀, ▶, ▲, ⟳)를 Windows 11 스타일의
+     선명한 컬러 벡터 그래픽 아이콘(20x20px)으로 전면 교체하고 목록 기본 아이콘 크기 확대
+2. Ctrl + 마우스 휠 스크롤 보기 모드(썸네일 크기) 실시간 전환:
+   - 패널 위에서 [Ctrl + 마우스 휠 위로] 스크롤 시:
+     자세히 → 목록 → 내용 → 타일 → 작은 아이콘 → 보통 아이콘 → 큰 아이콘 → 아주 큰 아이콘(최대 220px) 순으로 확대 전환
+   - [Ctrl + 마우스 휠 아래로] 스크롤 시 역순으로 축소/상세 보기로 즉시 전환
+3. 파일/폴더 선택 후 Enter 키 즉시 실행 및 진입:
+   - 메인 Enter 및 숫자패드 Enter로 폴더 진입 / 파일 실행, Backspace로 상위 폴더 이동
+4. 상단 레이아웃·드라이브 드롭다운 메뉴화 & 즐겨찾기 전용 바 확장
+5. 전체 선택(Ctrl+A) 시 상위 폴더('..') 선택 자동 제외
 """
 
 from __future__ import annotations
@@ -109,15 +109,29 @@ DEFAULT_COLOR_RULES: Dict[str, Dict[str, object]] = {
 }
 
 VIEW_MODES_META: List[Tuple[str, str, int]] = [
-    ("extra_large_icons", "아주 큰 아이콘", 144),
-    ("large_icons", "큰 아이콘", 88),
-    ("medium_icons", "보통 아이콘", 56),
-    ("small_icons", "작은 아이콘", 28),
-    ("list", "목록", 22),
-    ("details", "자세히", 20),
-    ("tiles", "타일", 48),
-    ("content", "내용", 36),
+    ("extra_large_icons", "아주 큰 아이콘", 148),
+    ("large_icons", "큰 아이콘", 92),
+    ("medium_icons", "보통 아이콘", 60),
+    ("small_icons", "작은 아이콘", 32),
+    ("list", "목록", 24),
+    ("details", "자세히", 24),
+    ("tiles", "타일", 52),
+    ("content", "내용", 40),
 ]
+
+# Ctrl + 마우스 휠 확대/축소 순서 (아래로 스크롤 <-> 위로 스크롤)
+ZOOM_WHEEL_ORDER: List[str] = [
+    "details",            # 1단계: 자세히 (테이블)
+    "list",               # 2단계: 목록
+    "content",            # 3단계: 내용
+    "tiles",              # 4단계: 타일
+    "small_icons",        # 5단계: 작은 아이콘 (32px)
+    "medium_icons",       # 6단계: 보통 아이콘 (60px)
+    "large_icons",        # 7단계: 큰 아이콘 (92px)
+    "extra_large_icons",  # 8단계: 아주 큰 아이콘 (148px~220px)
+]
+
+VIEW_MODE_LABELS: Dict[str, str] = {k: v for k, v, _ in VIEW_MODES_META}
 
 
 def load_app_config() -> Dict[str, object]:
@@ -313,7 +327,7 @@ def open_path_with_os(target_path: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 엔진 선택 및 Qt (PySide6 / PyQt6) 부트스트랩
+# 엔진 선택 및 PyQt6 부트스트랩
 # ---------------------------------------------------------------------------
 def _detect_qt_binding() -> Optional[str]:
     """설치된 Qt 바인딩(PySide6 또는 PyQt6)을 감지하여 반환합니다."""
@@ -377,8 +391,12 @@ def run_pyqt6_app() -> None:
     if binding == "PySide6":
         from PySide6.QtCore import (  # type: ignore[import-not-found]
             QFileInfo,
+            QItemSelection,
+            QItemSelectionModel,
             QMimeData,
             QPoint,
+            QPointF,
+            QRectF,
             QSize,
             Qt,
             QUrl,
@@ -394,7 +412,10 @@ def run_pyqt6_app() -> None:
             QImageReader,
             QKeySequence,
             QPainter,
+            QPainterPath,
+            QPen,
             QPixmap,
+            QPolygonF,
             QShortcut,
         )
         from PySide6.QtWidgets import (  # type: ignore[import-not-found]
@@ -434,8 +455,12 @@ def run_pyqt6_app() -> None:
     else:
         from PyQt6.QtCore import (
             QFileInfo,
+            QItemSelection,
+            QItemSelectionModel,
             QMimeData,
             QPoint,
+            QPointF,
+            QRectF,
             QSize,
             Qt,
             QUrl,
@@ -451,7 +476,10 @@ def run_pyqt6_app() -> None:
             QImageReader,
             QKeySequence,
             QPainter,
+            QPainterPath,
+            QPen,
             QPixmap,
+            QPolygonF,
             QShortcut,
         )
         from PyQt6.QtWidgets import (
@@ -489,6 +517,131 @@ def run_pyqt6_app() -> None:
             QWidget,
         )
 
+    # -----------------------------------------------------------------------
+    # 고시인성 벡터 UI 아이콘 생성기 (작아서 안 보이던 유니코드 기호를 선명한 그래픽으로 대체)
+    # -----------------------------------------------------------------------
+    def create_ui_icon(kind: str, dark_mode: bool = True, size: int = 20) -> QIcon:
+        pix = QPixmap(size, size)
+        pix.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pix)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        fg_main = QColor("#E2E8F0" if dark_mode else "#334155")
+        accent_blue = QColor("#38BDF8" if dark_mode else "#2563EB")
+        accent_green = QColor("#34D399" if dark_mode else "#059669")
+        accent_amber = QColor("#FBBF24" if dark_mode else "#D97706")
+        accent_purple = QColor("#C084FC" if dark_mode else "#7C3AED")
+        accent_red = QColor("#F87171" if dark_mode else "#DC2626")
+
+        if kind == "new":
+            # Windows 11 스타일: 파란 원 + 선명한 십자(+)
+            pen = QPen(accent_blue, 1.8)
+            p.setPen(pen)
+            p.setBrush(QColor(37, 99, 235, 45))
+            p.drawEllipse(QRectF(2.0, 2.0, size - 4.0, size - 4.0))
+            pen_plus = QPen(accent_blue, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            p.setPen(pen_plus)
+            mid = size / 2.0
+            p.drawLine(QPointF(mid, 5.5), QPointF(mid, size - 5.5))
+            p.drawLine(QPointF(5.5, mid), QPointF(size - 5.5, mid))
+
+        elif kind == "sort":
+            # 상하 교차 화살표 (좌측 파란 상향 화살표, 우측 슬레이트 하향 화살표)
+            pen_up = QPen(accent_blue, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen_up)
+            p.drawLine(QPointF(6.0, 16.0), QPointF(6.0, 4.0))
+            p.drawLine(QPointF(3.0, 7.5), QPointF(6.0, 4.0))
+            p.drawLine(QPointF(9.0, 7.5), QPointF(6.0, 4.0))
+
+            pen_dn = QPen(fg_main, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen_dn)
+            p.drawLine(QPointF(14.0, 4.0), QPointF(14.0, 16.0))
+            p.drawLine(QPointF(11.0, 12.5), QPointF(14.0, 16.0))
+            p.drawLine(QPointF(17.0, 12.5), QPointF(14.0, 16.0))
+
+        elif kind == "view":
+            # 2x2 그리드 카드 아이콘
+            pen = QPen(accent_blue, 1.8)
+            p.setPen(pen)
+            p.setBrush(QColor(56, 189, 248, 55))
+            p.drawRoundedRect(QRectF(2.5, 2.5, 6.5, 6.5), 1.5, 1.5)
+            p.drawRoundedRect(QRectF(11.0, 2.5, 6.5, 6.5), 1.5, 1.5)
+            p.setPen(QPen(fg_main, 1.8))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(QRectF(2.5, 11.0, 6.5, 6.5), 1.5, 1.5)
+            p.drawRoundedRect(QRectF(11.0, 11.0, 6.5, 6.5), 1.5, 1.5)
+
+        elif kind == "preview":
+            # Windows 11 미리보기 창 아이콘 (좌측 흰/투명, 우측 파란 강조 분할 사각형)
+            p.setPen(QPen(fg_main, 1.8))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(QRectF(2.0, 3.5, 16.0, 13.0), 2.5, 2.5)
+            p.setPen(QPen(accent_blue, 2.0))
+            p.setBrush(QColor(37, 99, 235, 95))
+            p.drawRoundedRect(QRectF(10.5, 3.5, 7.5, 13.0), 2.0, 2.0)
+
+        elif kind == "details":
+            # Windows 11 세부정보 창 아이콘 (우측에 파란 줄무늬 표시)
+            p.setPen(QPen(fg_main, 1.8))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(QRectF(2.0, 3.5, 16.0, 13.0), 2.5, 2.5)
+            p.setPen(QPen(accent_blue, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            p.drawLine(QPointF(10.0, 4.0), QPointF(10.0, 16.0))
+            for y_pos in (7.0, 10.0, 13.0):
+                p.drawLine(QPointF(12.2, y_pos), QPointF(15.8, y_pos))
+
+        elif kind == "layout":
+            # PyQuadDir 4분할 컬러 블록 아이콘
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(accent_blue)
+            p.drawRoundedRect(QRectF(2.0, 2.0, 7.2, 7.2), 1.8, 1.8)
+            p.setBrush(accent_green)
+            p.drawRoundedRect(QRectF(10.8, 2.0, 7.2, 7.2), 1.8, 1.8)
+            p.setBrush(accent_amber)
+            p.drawRoundedRect(QRectF(2.0, 10.8, 7.2, 7.2), 1.8, 1.8)
+            p.setBrush(accent_purple)
+            p.drawRoundedRect(QRectF(10.8, 10.8, 7.2, 7.2), 1.8, 1.8)
+
+        elif kind == "back":
+            pen = QPen(fg_main, 2.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen)
+            p.drawLine(QPointF(15.5, 10.0), QPointF(4.5, 10.0))
+            p.drawLine(QPointF(9.5, 5.0), QPointF(4.5, 10.0))
+            p.drawLine(QPointF(9.5, 15.0), QPointF(4.5, 10.0))
+
+        elif kind == "forward":
+            pen = QPen(fg_main, 2.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen)
+            p.drawLine(QPointF(4.5, 10.0), QPointF(15.5, 10.0))
+            p.drawLine(QPointF(10.5, 5.0), QPointF(15.5, 10.0))
+            p.drawLine(QPointF(10.5, 15.0), QPointF(15.5, 10.0))
+
+        elif kind == "up":
+            pen = QPen(accent_blue, 2.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen)
+            p.drawLine(QPointF(10.0, 15.5), QPointF(10.0, 4.5))
+            p.drawLine(QPointF(5.0, 9.5), QPointF(10.0, 4.5))
+            p.drawLine(QPointF(15.0, 9.5), QPointF(10.0, 4.5))
+
+        elif kind == "refresh":
+            pen = QPen(accent_green, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen)
+            p.drawArc(QRectF(3.5, 3.5, 13.0, 13.0), 45 * 16, 270 * 16)
+            p.drawLine(QPointF(14.5, 3.0), QPointF(16.5, 6.8))
+            p.drawLine(QPointF(12.2, 6.8), QPointF(16.5, 6.8))
+
+        elif kind == "delete":
+            pen = QPen(accent_red, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            p.setPen(pen)
+            p.drawLine(QPointF(4.0, 5.5), QPointF(16.0, 5.5))
+            p.drawLine(QPointF(8.0, 3.5), QPointF(12.0, 3.5))
+            p.drawRoundedRect(QRectF(5.5, 5.5, 9.0, 11.5), 1.5, 1.5)
+            p.drawLine(QPointF(8.5, 8.5), QPointF(8.5, 14.0))
+            p.drawLine(QPointF(11.5, 8.5), QPointF(11.5, 14.0))
+
+        p.end()
+        return QIcon(pix)
+
     # 썸네일 아이콘 인메모리 캐시: (path, mtime_ns, size) -> QIcon
     THUMBNAIL_CACHE: Dict[Tuple[str, int, int], QIcon] = {}
 
@@ -503,7 +656,7 @@ def run_pyqt6_app() -> None:
     ) -> QIcon:
         if not show_icons:
             return QIcon()
-        if not is_dir and ext in IMAGE_EXTENSIONS and icon_px >= 24:
+        if not is_dir and ext in IMAGE_EXTENSIONS and icon_px >= 20:
             key = (path_str, int(mtime * 1000), icon_px)
             cached = THUMBNAIL_CACHE.get(key)
             if cached is not None:
@@ -556,7 +709,6 @@ def run_pyqt6_app() -> None:
 
         def __lt__(self, other: "QTableWidgetItem") -> bool:
             if isinstance(other, SortableTableWidgetItem):
-                # 상위 폴더(..)는 정렬 방향과 무관하게 항상 최상단 고정
                 header = self.tableWidget().horizontalHeader() if self.tableWidget() else None
                 order = header.sortIndicatorOrder() if header else Qt.SortOrder.AscendingOrder
                 if self.is_parent != other.is_parent:
@@ -660,7 +812,7 @@ def run_pyqt6_app() -> None:
         return success_count, errors
 
     # -----------------------------------------------------------------------
-    # 1-A. 자세히(Details) 및 내용(Content) 보기용 테이블 뷰 (상위 폴더 선택 제외 보장)
+    # 1-A. 자세히(Details) 및 내용(Content) 보기용 테이블 뷰
     # -----------------------------------------------------------------------
     class FileTableView(QTableWidget):
         filesDropped = pyqtSignal(list, str, Qt.KeyboardModifier)
@@ -679,7 +831,8 @@ def run_pyqt6_app() -> None:
             self.setAlternatingRowColors(True)
             self.setShowGrid(False)
             self.verticalHeader().setVisible(False)
-            self.verticalHeader().setDefaultSectionSize(26)
+            self.verticalHeader().setDefaultSectionSize(28)
+            self.setIconSize(QSize(24, 24))
 
             header = self.horizontalHeader()
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -703,8 +856,6 @@ def run_pyqt6_app() -> None:
             sel_model = self.selectionModel()
             if sel_model is None:
                 return
-            from PyQt6.QtCore import QItemSelection, QItemSelectionModel
-
             selection = QItemSelection()
             max_col = self.columnCount() - 1
             for row in range(self.rowCount()):
@@ -724,6 +875,34 @@ def run_pyqt6_app() -> None:
         def focusInEvent(self, event) -> None:
             super().focusInEvent(event)
             self.paneFocused.emit()
+
+        def keyPressEvent(self, event) -> None:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                self.paneFocused.emit()
+                self.dir_tab.activate_selected_or_current()
+                event.accept()
+                return
+            if event.key() == Qt.Key.Key_Backspace:
+                self.paneFocused.emit()
+                self.dir_tab.go_up()
+                event.accept()
+                return
+            super().keyPressEvent(event)
+
+        def wheelEvent(self, event) -> None:
+            """Ctrl + 마우스 휠 스크롤 시 보기 모드 및 썸네일 크기를 전환합니다."""
+            if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                self.paneFocused.emit()
+                delta = event.angleDelta().y()
+                if delta == 0:
+                    delta = event.angleDelta().x()
+                if delta > 0:
+                    self.dir_tab.step_view_mode_zoom(1)
+                elif delta < 0:
+                    self.dir_tab.step_view_mode_zoom(-1)
+                event.accept()
+                return
+            super().wheelEvent(event)
 
         def mousePressEvent(self, event) -> None:
             self.paneFocused.emit()
@@ -805,7 +984,7 @@ def run_pyqt6_app() -> None:
             self.filesDropped.emit(src_paths, target_dir, modifiers)
 
     # -----------------------------------------------------------------------
-    # 1-B. 썸네일/아이콘/목록/타일 보기용 리스트 뷰 (상위 폴더 선택 제외 보장)
+    # 1-B. 썸네일/아이콘/목록/타일 보기용 리스트 뷰
     # -----------------------------------------------------------------------
     class FileIconListView(QListWidget):
         filesDropped = pyqtSignal(list, str, Qt.KeyboardModifier)
@@ -842,6 +1021,34 @@ def run_pyqt6_app() -> None:
         def focusInEvent(self, event) -> None:
             super().focusInEvent(event)
             self.paneFocused.emit()
+
+        def keyPressEvent(self, event) -> None:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                self.paneFocused.emit()
+                self.dir_tab.activate_selected_or_current()
+                event.accept()
+                return
+            if event.key() == Qt.Key.Key_Backspace:
+                self.paneFocused.emit()
+                self.dir_tab.go_up()
+                event.accept()
+                return
+            super().keyPressEvent(event)
+
+        def wheelEvent(self, event) -> None:
+            """Ctrl + 마우스 휠 스크롤 시 보기 모드 및 썸네일 크기를 전환합니다."""
+            if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                self.paneFocused.emit()
+                delta = event.angleDelta().y()
+                if delta == 0:
+                    delta = event.angleDelta().x()
+                if delta > 0:
+                    self.dir_tab.step_view_mode_zoom(1)
+                elif delta < 0:
+                    self.dir_tab.step_view_mode_zoom(-1)
+                event.accept()
+                return
+            super().wheelEvent(event)
 
         def mousePressEvent(self, event) -> None:
             self.paneFocused.emit()
@@ -912,12 +1119,12 @@ def run_pyqt6_app() -> None:
             self.filesDropped.emit(src_paths, target_dir, modifiers)
 
     # -----------------------------------------------------------------------
-    # 2. 개별 탭 위젯 (테이블 뷰 + 아이콘/썸네일 뷰 + 정렬/분류/보기 전환)
+    # 2. 개별 탭 위젯 (테이블 뷰 + 아이콘/썸네일 뷰 + Ctrl+휠 줌 전환)
     # -----------------------------------------------------------------------
     class DirectoryTab(QWidget):
         pathChanged = pyqtSignal(str)
         statusUpdated = pyqtSignal(str)
-        selectionChangedSignal = pyqtSignal(str)  # 선택된 첫 파일 경로 (미리보기/세부정보 창 연동)
+        selectionChangedSignal = pyqtSignal(str)
         openInNewTabRequested = pyqtSignal(str)
         paneActivated = pyqtSignal()
 
@@ -937,13 +1144,14 @@ def run_pyqt6_app() -> None:
             self.history_index: int = -1
             self.current_path: str = ""
 
-            # 보기/정렬/분류 상태 (메인 윈도우 기본값 상속)
-            self.view_mode: str = self.main_window.default_view_mode  # details, extra_large_icons, large_icons, medium_icons, small_icons, list, tiles, content
-            self.sort_by: str = "name"     # name, modified, type, size, ext, created
+            self.view_mode: str = self.main_window.default_view_mode
+            self.extra_zoom_px: int = 148  # 아주 큰 아이콘 상태에서 추가 휠 확대 지원 (148 ~ 220px)
+            self.sort_by: str = "name"
             self.sort_asc: bool = True
-            self.group_by: str = "none"    # none, type, modified, size
+            self.group_by: str = "none"
 
             self._build_ui()
+            self.refresh_nav_icons()
             self.navigate_to(initial_path, record_history=True)
 
         def _build_ui(self) -> None:
@@ -956,22 +1164,18 @@ def run_pyqt6_app() -> None:
             nav_layout.setSpacing(3)
 
             self.btn_back = QToolButton()
-            self.btn_back.setText("◀")
             self.btn_back.setToolTip("뒤로 가기 (Alt+Left)")
             self.btn_back.clicked.connect(self.go_back)
 
             self.btn_forward = QToolButton()
-            self.btn_forward.setText("▶")
             self.btn_forward.setToolTip("앞으로 가기 (Alt+Right)")
             self.btn_forward.clicked.connect(self.go_forward)
 
             self.btn_up = QToolButton()
-            self.btn_up.setText("▲")
             self.btn_up.setToolTip("상위 폴더로 이동 (Backspace / Alt+Up)")
             self.btn_up.clicked.connect(self.go_up)
 
             self.btn_refresh = QToolButton()
-            self.btn_refresh.setText("⟳")
             self.btn_refresh.setToolTip("새로고침 (F5)")
             self.btn_refresh.clicked.connect(self.refresh)
 
@@ -986,20 +1190,21 @@ def run_pyqt6_app() -> None:
 
             self.filter_edit = QLineEdit()
             self.filter_edit.setPlaceholderText("🔍 이름/확장자 필터...")
-            self.filter_edit.setFixedWidth(130)
+            self.filter_edit.setFixedWidth(135)
             self.filter_edit.setClearButtonEnabled(True)
             self.filter_edit.textChanged.connect(self.apply_filter)
 
             for w in (self.btn_back, self.btn_forward, self.btn_up, self.btn_refresh):
-                w.setFixedSize(25, 25)
+                w.setFixedSize(28, 28)
+                w.setIconSize(QSize(18, 18))
                 nav_layout.addWidget(w)
 
+            self.btn_star.setFixedSize(28, 28)
             nav_layout.addWidget(self.address_edit, stretch=1)
             nav_layout.addWidget(self.btn_star)
             nav_layout.addWidget(self.filter_edit)
             layout.addLayout(nav_layout)
 
-            # QStackedWidget: Page 0 = 자세히/내용 테이블 뷰, Page 1 = 아이콘/썸네일/목록/타일 리스트 뷰
             self.stack = QStackedWidget()
 
             self.table = FileTableView(self)
@@ -1028,6 +1233,13 @@ def run_pyqt6_app() -> None:
             self.summary_label.setObjectName("PaneSummaryLabel")
             layout.addWidget(self.summary_label)
 
+        def refresh_nav_icons(self) -> None:
+            dm = self.main_window.dark_mode
+            self.btn_back.setIcon(create_ui_icon("back", dm, 18))
+            self.btn_forward.setIcon(create_ui_icon("forward", dm, 18))
+            self.btn_up.setIcon(create_ui_icon("up", dm, 18))
+            self.btn_refresh.setIcon(create_ui_icon("refresh", dm, 18))
+
         def selected_file_paths(self) -> List[str]:
             if self.stack.currentWidget() == self.icon_list:
                 return self.icon_list.selected_file_paths()
@@ -1035,7 +1247,50 @@ def run_pyqt6_app() -> None:
 
         def set_view_mode(self, mode: str) -> None:
             self.view_mode = mode
+            if mode == "extra_large_icons" and self.extra_zoom_px < 148:
+                self.extra_zoom_px = 148
             self.refresh()
+            # 전환 후에도 현재 활성 뷰 위젯에 포커스를 유지해 연속 Ctrl+휠 및 키보드 조작 보장
+            self.stack.currentWidget().setFocus()
+
+        def step_view_mode_zoom(self, step: int) -> None:
+            """
+            Ctrl + 마우스 휠 스크롤로 보기 모드를 단계별로 확대(step > 0)하거나 축소(step < 0)합니다.
+            순서: 자세히 <-> 목록 <-> 내용 <-> 타일 <-> 작은 아이콘 <-> 보통 아이콘 <-> 큰 아이콘 <-> 아주 큰 아이콘(148~220px)
+            """
+            curr_idx = (
+                ZOOM_WHEEL_ORDER.index(self.view_mode)
+                if self.view_mode in ZOOM_WHEEL_ORDER
+                else 0
+            )
+
+            # 이미 '아주 큰 아이콘'인 상태에서 휠을 더 올리면 220px까지 썸네일을 한층 더 크게 확대
+            if self.view_mode == "extra_large_icons" and step > 0:
+                if self.extra_zoom_px < 220:
+                    self.extra_zoom_px = min(220, self.extra_zoom_px + 24)
+                    self.refresh()
+                    self.main_window.statusBar().showMessage(
+                        f"🔍 [Ctrl+마우스 휠] 보기 확대: 아주 큰 아이콘 ({self.extra_zoom_px}px)", 2500
+                    )
+                return
+
+            if self.view_mode == "extra_large_icons" and step < 0 and self.extra_zoom_px > 148:
+                self.extra_zoom_px = max(148, self.extra_zoom_px - 24)
+                self.refresh()
+                self.main_window.statusBar().showMessage(
+                    f"🔍 [Ctrl+마우스 휠] 보기 축소: 아주 큰 아이콘 ({self.extra_zoom_px}px)", 2500
+                )
+                return
+
+            new_idx = max(0, min(len(ZOOM_WHEEL_ORDER) - 1, curr_idx + (1 if step > 0 else -1)))
+            if new_idx != curr_idx:
+                new_mode = ZOOM_WHEEL_ORDER[new_idx]
+                self.extra_zoom_px = 148
+                self.set_view_mode(new_mode)
+                mode_kr = VIEW_MODE_LABELS.get(new_mode, new_mode)
+                self.main_window.statusBar().showMessage(
+                    f"🔍 [Ctrl+마우스 휠] 보기 모드 전환: {mode_kr}", 2500
+                )
 
         def set_sort(self, sort_by: Optional[str] = None, ascending: Optional[bool] = None) -> None:
             if sort_by is not None:
@@ -1078,7 +1333,8 @@ def run_pyqt6_app() -> None:
             self.paneActivated.emit()
             text = self.address_edit.text().strip()
             if text:
-                self.navigate_to(text, record_history=True)
+                if self.navigate_to(text, record_history=True):
+                    self.stack.currentWidget().setFocus()
 
         def go_back(self) -> None:
             self.paneActivated.emit()
@@ -1200,7 +1456,6 @@ def run_pyqt6_app() -> None:
 
             has_parent = p.parent != p
 
-            # 보기 모드 분기: 자세히(details) / 내용(content) -> Table, 그 외 -> IconList
             if self.view_mode in ("details", "content"):
                 self.stack.setCurrentWidget(self.table)
                 self._populate_table_view(p, records, has_parent)
@@ -1217,12 +1472,11 @@ def run_pyqt6_app() -> None:
             self.table.setSortingEnabled(False)
             self.table.setRowCount(0)
 
-            icon_px = 36 if self.view_mode == "content" else 18
-            row_h = 42 if self.view_mode == "content" else 26
+            icon_px = 40 if self.view_mode == "content" else 24
+            row_h = 46 if self.view_mode == "content" else 28
             self.table.setIconSize(QSize(icon_px, icon_px))
             self.table.verticalHeader().setDefaultSectionSize(row_h)
 
-            # 분류(Group By) 헤더 삽입 여부 처리
             grouped_rows: List[Tuple[str, Optional[Dict[str, object]]]] = []
             if self.group_by == "none":
                 for r in records:
@@ -1254,7 +1508,6 @@ def run_pyqt6_app() -> None:
                 item_name = SortableTableWidgetItem("📁 .. (상위 폴더)", "", is_dir=True, is_parent=True)
                 item_name.setData(Qt.ItemDataRole.UserRole, parent_str)
                 item_name.setData(Qt.ItemDataRole.UserRole + 1, True)
-                # 상위 폴더는 선택(Selection)에서 제외하되 더블클릭 이동은 가능하도록 설정
                 item_name.setFlags(Qt.ItemFlag.ItemIsEnabled)
                 font = item_name.font()
                 font.setBold(True)
@@ -1347,16 +1600,17 @@ def run_pyqt6_app() -> None:
         ) -> None:
             self.icon_list.clear()
 
+            xl_px = self.extra_zoom_px
             mode_px_map = {
-                "extra_large_icons": (144, QSize(172, 190), QListView.ViewMode.IconMode),
-                "large_icons": (88, QSize(118, 134), QListView.ViewMode.IconMode),
-                "medium_icons": (56, QSize(92, 102), QListView.ViewMode.IconMode),
-                "small_icons": (28, QSize(150, 38), QListView.ViewMode.ListMode),
-                "list": (20, QSize(180, 28), QListView.ViewMode.ListMode),
-                "tiles": (48, QSize(230, 64), QListView.ViewMode.ListMode),
+                "extra_large_icons": (xl_px, QSize(xl_px + 28, xl_px + 46), QListView.ViewMode.IconMode),
+                "large_icons": (92, QSize(124, 140), QListView.ViewMode.IconMode),
+                "medium_icons": (60, QSize(98, 108), QListView.ViewMode.IconMode),
+                "small_icons": (32, QSize(160, 42), QListView.ViewMode.ListMode),
+                "list": (24, QSize(190, 32), QListView.ViewMode.ListMode),
+                "tiles": (52, QSize(240, 68), QListView.ViewMode.ListMode),
             }
             icon_px, grid_sz, lv_mode = mode_px_map.get(
-                self.view_mode, (56, QSize(96, 104), QListView.ViewMode.IconMode)
+                self.view_mode, (60, QSize(98, 108), QListView.ViewMode.IconMode)
             )
             self.icon_list.setViewMode(lv_mode)
             self.icon_list.setIconSize(QSize(icon_px, icon_px))
@@ -1372,7 +1626,6 @@ def run_pyqt6_app() -> None:
                 p_item = QListWidgetItem("📁 .. (상위 폴더)")
                 p_item.setData(Qt.ItemDataRole.UserRole, parent_str)
                 p_item.setData(Qt.ItemDataRole.UserRole + 1, True)
-                # 상위 폴더는 선택 불가(Flags에서 ItemIsSelectable 제외)
                 p_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
                 f = p_item.font()
                 f.setBold(True)
@@ -1454,6 +1707,7 @@ def run_pyqt6_app() -> None:
             selected_paths = self.selected_file_paths()
             free_b, total_b = _safe_disk_usage(self.current_path)
             free_str = f"여유 {format_size(free_b)}" if total_b > 0 else ""
+            mode_kr = VIEW_MODE_LABELS.get(self.view_mode, self.view_mode)
 
             if selected_paths:
                 sel_bytes = 0
@@ -1464,13 +1718,13 @@ def run_pyqt6_app() -> None:
                     except Exception:
                         pass
                 msg = (
-                    f"선택: {len(selected_paths)}개 ({format_size(sel_bytes)})  |  "
-                    f"전체: 폴더 {getattr(self, '_dir_count', 0)}개, 파일 {getattr(self, '_file_count', 0)}개 "
+                    f"[{mode_kr}] 선택: {len(selected_paths)}개 ({format_size(sel_bytes)})  |  "
+                    f"폴더 {getattr(self, '_dir_count', 0)}개, 파일 {getattr(self, '_file_count', 0)}개 "
                     f"({format_size(getattr(self, '_total_bytes', 0))})"
                 )
             else:
                 msg = (
-                    f"폴더 {getattr(self, '_dir_count', 0)}개, 파일 {getattr(self, '_file_count', 0)}개 "
+                    f"[{mode_kr}] 폴더 {getattr(self, '_dir_count', 0)}개, 파일 {getattr(self, '_file_count', 0)}개 "
                     f"({format_size(getattr(self, '_total_bytes', 0))})"
                 )
             if free_str:
@@ -1478,6 +1732,40 @@ def run_pyqt6_app() -> None:
 
             self.summary_label.setText(msg)
             self.statusUpdated.emit(f"[{self.pane.pane_title}] {self.current_path}  —  {msg}")
+
+        def activate_selected_or_current(self) -> None:
+            """선택된 파일/폴더(또는 현재 포커스 행)에서 Enter 키를 눌렀을 때 폴더 진입 또는 파일 실행을 수행합니다."""
+            self.paneActivated.emit()
+            selected_paths = self.selected_file_paths()
+            if selected_paths:
+                dirs = [p for p in selected_paths if os.path.isdir(p)]
+                files = [p for p in selected_paths if os.path.isfile(p)]
+                if len(selected_paths) == 1 and dirs:
+                    self.navigate_to(dirs[0], record_history=True)
+                    return
+                if dirs and not files:
+                    self.navigate_to(dirs[0], record_history=True)
+                    for extra_d in dirs[1:]:
+                        self.openInNewTabRequested.emit(extra_d)
+                    return
+                for f_path in files:
+                    self._activate_path(f_path)
+                return
+
+            if self.stack.currentWidget() == self.icon_list:
+                curr_item = self.icon_list.currentItem()
+                if curr_item is not None:
+                    full_path = curr_item.data(Qt.ItemDataRole.UserRole)
+                    if full_path:
+                        self._activate_path(str(full_path))
+            else:
+                row = self.table.currentRow()
+                if row >= 0:
+                    name_item = self.table.item(row, 0)
+                    if name_item is not None:
+                        full_path = name_item.data(Qt.ItemDataRole.UserRole)
+                        if full_path:
+                            self._activate_path(str(full_path))
 
         def _on_table_double_clicked(self, index) -> None:
             self.paneActivated.emit()
@@ -1550,19 +1838,18 @@ def run_pyqt6_app() -> None:
 
             if len(selected_paths) == 1 and os.path.isdir(selected_paths[0]):
                 target_folder = selected_paths[0]
-                act_open = menu.addAction("📂 열기")
+                act_open = menu.addAction("📂 열기 (Enter)")
                 act_open_tab = menu.addAction("➕ 새 탭에서 폴더 열기 (휠 클릭)")
                 act_open.triggered.connect(lambda: self.navigate_to(target_folder))
                 act_open_tab.triggered.connect(lambda: self.openInNewTabRequested.emit(target_folder))
                 menu.addSeparator()
             elif len(selected_paths) == 1 and os.path.isfile(selected_paths[0]):
                 target_file = selected_paths[0]
-                act_run = menu.addAction("▶️ 기본 프로그램으로 실행")
+                act_run = menu.addAction("▶️ 기본 프로그램으로 실행 (Enter)")
                 act_run.triggered.connect(lambda: open_path_with_os(target_file))
                 menu.addSeparator()
 
-            # 보기 모드 및 정렬 빠른 서브메뉴
-            view_sub = menu.addMenu("⊞ 보기 모드 변경")
+            view_sub = menu.addMenu("🖼️ 보기 모드 변경 (Ctrl+휠)")
             for v_key, v_label, _ in VIEW_MODES_META:
                 act_v = view_sub.addAction(f"{'• ' if self.view_mode == v_key else '   '}{v_label}")
                 act_v.triggered.connect(lambda checked=False, k=v_key: self.set_view_mode(k))
@@ -1778,7 +2065,7 @@ def run_pyqt6_app() -> None:
             super().__init__(parent)
             self.main_window = main_window
             self.setObjectName("InspectorPane")
-            self.mode: str = "preview"  # "preview" or "details"
+            self.mode: str = "preview"
             self.current_target_path: str = ""
             self.setMinimumWidth(260)
             self.setMaximumWidth(460)
@@ -1790,7 +2077,7 @@ def run_pyqt6_app() -> None:
             layout.setSpacing(6)
 
             hdr = QHBoxLayout()
-            self.title_lbl = QLabel("◧ 미리 보기 창")
+            self.title_lbl = QLabel("🖼️ 미리 보기 창")
             self.title_lbl.setStyleSheet("font-weight: bold; font-size: 13px;")
             hdr.addWidget(self.title_lbl, stretch=1)
 
@@ -1819,7 +2106,7 @@ def run_pyqt6_app() -> None:
 
         def set_mode(self, mode: str) -> None:
             self.mode = mode
-            self.title_lbl.setText("◧ 미리 보기 창" if mode == "preview" else "◨ 세부 정보 창")
+            self.title_lbl.setText("🖼️ 미리 보기 창" if mode == "preview" else "📋 세부 정보 창")
             self.inspect_path(self.current_target_path)
 
         def inspect_path(self, path_str: str) -> None:
@@ -1957,11 +2244,13 @@ def run_pyqt6_app() -> None:
             self.path_title_label.setObjectName("PaneTitlePath")
             header_bar.addWidget(self.path_title_label, stretch=1)
 
-            btn_new_tab = QToolButton()
-            btn_new_tab.setText("➕ 새 탭")
-            btn_new_tab.setToolTip("현재 패널에 새 탭 추가 (Ctrl+T)")
-            btn_new_tab.clicked.connect(lambda: self.add_new_tab(self.current_path()))
-            header_bar.addWidget(btn_new_tab)
+            self.btn_new_tab = QToolButton()
+            self.btn_new_tab.setText("새 탭")
+            self.btn_new_tab.setIcon(create_ui_icon("new", self.main_window.dark_mode, 16))
+            self.btn_new_tab.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            self.btn_new_tab.setToolTip("현재 패널에 새 탭 추가 (Ctrl+T)")
+            self.btn_new_tab.clicked.connect(lambda: self.add_new_tab(self.current_path()))
+            header_bar.addWidget(self.btn_new_tab)
 
             layout.addLayout(header_bar)
 
@@ -2015,9 +2304,11 @@ def run_pyqt6_app() -> None:
                 t.navigate_to(path_str, record_history=True)
 
         def refresh_all_tabs(self) -> None:
+            self.btn_new_tab.setIcon(create_ui_icon("new", self.main_window.dark_mode, 16))
             for i in range(self.tab_widget.count()):
                 w = self.tab_widget.widget(i)
                 if isinstance(w, DirectoryTab):
+                    w.refresh_nav_icons()
                     w.refresh()
 
         def get_all_tab_paths(self) -> List[str]:
@@ -2059,7 +2350,7 @@ def run_pyqt6_app() -> None:
             parent: Optional[QWidget] = None,
         ):
             super().__init__(parent)
-            self.setWindowTitle("🎨 PyQuadDir 확장자별 색상 필터 설정")
+            self.setWindowTitle("🎨 Q-Dir 확장자별 색상 필터 설정")
             self.resize(620, 420)
             self.dark_mode = dark_mode
             self.rules: Dict[str, Dict[str, object]] = json.loads(json.dumps(color_rules))
@@ -2243,12 +2534,12 @@ def run_pyqt6_app() -> None:
                 self.list_widget.setCurrentRow(new_idx)
 
     # -----------------------------------------------------------------------
-    # 6. 메인 Q-Dir 윈도우 (Windows 탐색기형 명령 바 + 1줄 전용 즐겨찾기 바)
+    # 6. 메인 Q-Dir 윈도우 (고시인성 벡터 아이콘 명령 바 + 즐겨찾기 바)
     # -----------------------------------------------------------------------
     class QDirMainWindow(QMainWindow):
         def __init__(self):
             super().__init__()
-            self.setWindowTitle("PyQuadDir Desktop Explorer v2.0 — 4분할 다중 탭 파일 탐색기")
+            self.setWindowTitle("PyQuadDir Desktop Explorer — 4분할 다중 탭 파일 탐색기")
             self.resize(1520, 940)
 
             self.config = load_app_config()
@@ -2272,6 +2563,7 @@ def run_pyqt6_app() -> None:
 
             self._build_ui()
             self._apply_theme()
+            self._refresh_toolbar_icons()
             self.set_layout_mode(self.current_layout_mode)
             self._set_active_pane(0)
 
@@ -2296,18 +2588,19 @@ def run_pyqt6_app() -> None:
 
         def _build_ui(self) -> None:
             # ===============================================================
-            # 1층: Windows 11 탐색기 스타일 통합 명령 바 (드롭다운 메뉴화)
+            # 1층: Windows 11 탐색기 스타일 통합 명령 바 (20x20 선명한 벡터 아이콘 적용)
             # ===============================================================
             cmd_tb = QToolBar("탐색기 명령 바")
             cmd_tb.setMovable(False)
-            cmd_tb.setIconSize(QSize(18, 18))
+            cmd_tb.setIconSize(QSize(20, 20))
             self.addToolBar(Qt.ToolBarArea.TopToolBarArea, cmd_tb)
 
-            # (1) [⊕ 새로 만들기 ▾]
-            btn_new = QToolButton()
-            btn_new.setText("⊕ 새로 만들기 ▾")
-            btn_new.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-            menu_new = QMenu(btn_new)
+            # (1) [새로 만들기 ▾]
+            self.btn_new = QToolButton()
+            self.btn_new.setText("새로 만들기 ▼")
+            self.btn_new.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            self.btn_new.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            menu_new = QMenu(self.btn_new)
             menu_new.addAction("📁 폴더 (Ctrl+Shift+N)").triggered.connect(self._shortcut_new_folder)
             menu_new.addSeparator()
             menu_new.addAction("📝 텍스트 문서 (.txt)").triggered.connect(
@@ -2322,12 +2615,12 @@ def run_pyqt6_app() -> None:
             menu_new.addAction("⚙️ 배치 스크립트 (.bat)").triggered.connect(
                 lambda: self._create_file_in_active("run.bat")
             )
-            btn_new.setMenu(menu_new)
-            cmd_tb.addWidget(btn_new)
+            self.btn_new.setMenu(menu_new)
+            cmd_tb.addWidget(self.btn_new)
 
             cmd_tb.addSeparator()
 
-            # (2) 파일 편집 아이콘 버튼들: 잘라내기 | 복사 | 붙여넣기 | 이름 바꾸기 | 다른 창으로 전송 | 삭제
+            # (2) 파일 편집 버튼들
             act_cut = QToolButton()
             act_cut.setText("✂️ 잘라내기")
             act_cut.setToolTip("선택 항목 잘라내기 (Ctrl+X)")
@@ -2353,7 +2646,7 @@ def run_pyqt6_app() -> None:
             cmd_tb.addWidget(act_rename)
 
             btn_send = QToolButton()
-            btn_send.setText("📤 다른 패널로 전송 ▾")
+            btn_send.setText("📤 다른 패널로 전송 ▼")
             btn_send.setToolTip("선택한 항목을 다른 패널(1~4번 창)로 즉시 복사하거나 이동합니다")
             btn_send.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
             self.send_menu = QMenu(btn_send)
@@ -2361,39 +2654,43 @@ def run_pyqt6_app() -> None:
             btn_send.setMenu(self.send_menu)
             cmd_tb.addWidget(btn_send)
 
-            act_del = QToolButton()
-            act_del.setText("🗑️ 삭제")
-            act_del.setToolTip("선택 항목 삭제 (Delete)")
-            act_del.clicked.connect(self._shortcut_delete)
-            cmd_tb.addWidget(act_del)
+            self.btn_del = QToolButton()
+            self.btn_del.setText("삭제")
+            self.btn_del.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            self.btn_del.setToolTip("선택 항목 삭제 (Delete)")
+            self.btn_del.clicked.connect(self._shortcut_delete)
+            cmd_tb.addWidget(self.btn_del)
 
             cmd_tb.addSeparator()
 
-            # (3) [⇅ 정렬 ▾] (이름, 수정한 날짜, 유형, 크기, 기타 / 오름차순·내림차순 / 분류 방법)
-            btn_sort = QToolButton()
-            btn_sort.setText("⇅ 정렬 ▾")
-            btn_sort.setToolTip("현재 활성 탭의 정렬 기준·방향 및 분류(그룹화) 방법을 설정합니다")
-            btn_sort.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-            self.sort_menu = QMenu(btn_sort)
+            # (3) [정렬 ▾] (선명한 상하 화살표 벡터 아이콘)
+            self.btn_sort = QToolButton()
+            self.btn_sort.setText("정렬 ▼")
+            self.btn_sort.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            self.btn_sort.setToolTip("현재 활성 탭의 정렬 기준·방향 및 분류(그룹화) 방법을 설정합니다")
+            self.btn_sort.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            self.sort_menu = QMenu(self.btn_sort)
             self.sort_menu.aboutToShow.connect(self._populate_sort_menu)
-            btn_sort.setMenu(self.sort_menu)
-            cmd_tb.addWidget(btn_sort)
+            self.btn_sort.setMenu(self.sort_menu)
+            cmd_tb.addWidget(self.btn_sort)
 
-            # (4) [⊞ 보기 ▾] (아주 큰 아이콘 ~ 내용 / 세부 정보 창 · 미리 보기 창 / 표시 옵션)
-            btn_view = QToolButton()
-            btn_view.setText("⊞ 보기 ▾")
-            btn_view.setToolTip("아이콘/썸네일 크기, 목록/자세히/타일 보기 및 표시 옵션을 변경합니다")
-            btn_view.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-            self.view_menu = QMenu(btn_view)
+            # (4) [보기 ▾] (선명한 2x2 그리드 벡터 아이콘)
+            self.btn_view = QToolButton()
+            self.btn_view.setText("보기 ▼")
+            self.btn_view.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            self.btn_view.setToolTip("아이콘/썸네일 크기 전환 (Ctrl + 마우스 휠 스크롤로도 전환 가능)")
+            self.btn_view.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            self.view_menu = QMenu(self.btn_view)
             self.view_menu.aboutToShow.connect(self._populate_view_menu)
-            btn_view.setMenu(self.view_menu)
-            cmd_tb.addWidget(btn_view)
+            self.btn_view.setMenu(self.view_menu)
+            cmd_tb.addWidget(self.btn_view)
 
             cmd_tb.addSeparator()
 
-            # (5) [📐 레이아웃 ▾] 드롭다운 메뉴 (공간 절약!)
+            # (5) [레이아웃 ▾] (4분할 컬러 로고 아이콘)
             self.btn_layout_menu = QToolButton()
-            self.btn_layout_menu.setText("📐 레이아웃: 4분할 ▾")
+            self.btn_layout_menu.setText("레이아웃: 4분할 ▼")
+            self.btn_layout_menu.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             self.btn_layout_menu.setToolTip("화면 분할 레이아웃 전환 및 창 비율 균등화")
             self.btn_layout_menu.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
             self.layout_menu = QMenu(self.btn_layout_menu)
@@ -2401,9 +2698,9 @@ def run_pyqt6_app() -> None:
             self.btn_layout_menu.setMenu(self.layout_menu)
             cmd_tb.addWidget(self.btn_layout_menu)
 
-            # (6) [💽 드라이브 ▾] 드롭다운 메뉴 (모든 드라이브 나열 대신 깔끔한 메뉴창!)
+            # (6) [💽 드라이브 ▾]
             self.btn_drive_menu = QToolButton()
-            self.btn_drive_menu.setText("💽 드라이브 ▾")
+            self.btn_drive_menu.setText("💽 드라이브 ▼")
             self.btn_drive_menu.setToolTip("연결된 모든 드라이브(C:, D: 등) 목록과 남은 용량을 보고 이동합니다")
             self.btn_drive_menu.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
             self.drive_menu = QMenu(self.btn_drive_menu)
@@ -2413,16 +2710,18 @@ def run_pyqt6_app() -> None:
 
             cmd_tb.addSeparator()
 
-            # (7) 우측: [◧ 미리 보기] 토글 버튼 & [🌙 테마]
+            # (7) 우측: [미리 보기] & [세부 정보] (선명한 분할 창 벡터 아이콘) & [테마]
             self.btn_preview_toggle = QToolButton()
-            self.btn_preview_toggle.setText("◧ 미리 보기")
+            self.btn_preview_toggle.setText("미리 보기")
+            self.btn_preview_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             self.btn_preview_toggle.setToolTip("우측 미리 보기 창 켜기/끄기 (이미지 및 문서 내용 실시간 미리보기)")
             self.btn_preview_toggle.setCheckable(True)
             self.btn_preview_toggle.clicked.connect(lambda checked: self.toggle_inspector_pane("preview", checked))
             cmd_tb.addWidget(self.btn_preview_toggle)
 
             self.btn_details_toggle = QToolButton()
-            self.btn_details_toggle.setText("◨ 세부 정보")
+            self.btn_details_toggle.setText("세부 정보")
+            self.btn_details_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             self.btn_details_toggle.setToolTip("우측 세부 정보 창 켜기/끄기 (파일 상세 메타데이터 및 해상도 표시)")
             self.btn_details_toggle.setCheckable(True)
             self.btn_details_toggle.clicked.connect(lambda checked: self.toggle_inspector_pane("details", checked))
@@ -2480,12 +2779,22 @@ def run_pyqt6_app() -> None:
 
             self.setStatusBar(QStatusBar())
             self.statusBar().showMessage(
-                "준비 완료 — 상단 [⊞ 보기]에서 이미지 썸네일(큰 아이콘)이나 [◧ 미리 보기] 창을 켜서 확인해 보세요."
+                "준비 완료 — 패널 위에서 [Ctrl + 마우스 휠]을 굴리면 보기 모드(자세히 ↔ 썸네일 아이콘)가 즉시 전환됩니다."
             )
             self._register_shortcuts()
 
+        def _refresh_toolbar_icons(self) -> None:
+            dm = self.dark_mode
+            self.btn_new.setIcon(create_ui_icon("new", dm, 20))
+            self.btn_del.setIcon(create_ui_icon("delete", dm, 20))
+            self.btn_sort.setIcon(create_ui_icon("sort", dm, 20))
+            self.btn_view.setIcon(create_ui_icon("view", dm, 20))
+            self.btn_layout_menu.setIcon(create_ui_icon("layout", dm, 20))
+            self.btn_preview_toggle.setIcon(create_ui_icon("preview", dm, 20))
+            self.btn_details_toggle.setIcon(create_ui_icon("details", dm, 20))
+
         # -------------------------------------------------------------------
-        # 상단 드롭다운 메뉴 동적 생성기 (전송 / 정렬 / 보기 / 레이아웃 / 드라이브)
+        # 상단 드롭다운 메뉴 동적 생성기
         # -------------------------------------------------------------------
         def _populate_send_menu(self) -> None:
             self.send_menu.clear()
@@ -2523,31 +2832,31 @@ def run_pyqt6_app() -> None:
                 ("size", "크기"),
             ]
             for s_key, s_label in main_sorts:
-                prefix = "• " if curr_sort == s_key else "   "
+                prefix = "● " if curr_sort == s_key else "    "
                 act = self.sort_menu.addAction(f"{prefix}{s_label}")
                 act.triggered.connect(lambda checked=False, k=s_key: self._set_active_sort(sort_by=k))
 
-            more_menu = self.sort_menu.addMenu("   기타")
+            more_menu = self.sort_menu.addMenu("    기타")
             for s_key, s_label in [("ext", "확장자"), ("created", "만든 날짜")]:
-                prefix = "• " if curr_sort == s_key else "   "
+                prefix = "● " if curr_sort == s_key else "    "
                 act = more_menu.addAction(f"{prefix}{s_label}")
                 act.triggered.connect(lambda checked=False, k=s_key: self._set_active_sort(sort_by=k))
 
             self.sort_menu.addSeparator()
-            act_asc = self.sort_menu.addAction(f"{'• ' if curr_asc else '   '}오름차순")
-            act_desc = self.sort_menu.addAction(f"{'• ' if not curr_asc else '   '}내림차순")
+            act_asc = self.sort_menu.addAction(f"{'● ' if curr_asc else '    '}오름차순")
+            act_desc = self.sort_menu.addAction(f"{'● ' if not curr_asc else '    '}내림차순")
             act_asc.triggered.connect(lambda: self._set_active_sort(ascending=True))
             act_desc.triggered.connect(lambda: self._set_active_sort(ascending=False))
 
             self.sort_menu.addSeparator()
-            grp_menu = self.sort_menu.addMenu("   분류 방법")
+            grp_menu = self.sort_menu.addMenu("    분류 방법")
             for g_key, g_label in [
                 ("none", "없음 (기본)"),
                 ("type", "유형별 그룹화"),
                 ("modified", "수정한 날짜별 그룹화"),
                 ("size", "크기별 그룹화"),
             ]:
-                prefix = "• " if curr_group == g_key else "   "
+                prefix = "● " if curr_group == g_key else "    "
                 act_g = grp_menu.addAction(f"{prefix}{g_label}")
                 act_g.triggered.connect(lambda checked=False, gk=g_key: self._set_active_group(gk))
 
@@ -2557,53 +2866,53 @@ def run_pyqt6_app() -> None:
             curr_mode = t.view_mode if t else self.default_view_mode
 
             for v_key, v_label, _ in VIEW_MODES_META:
-                prefix = "• " if curr_mode == v_key else "   "
+                prefix = "● " if curr_mode == v_key else "    "
                 act = self.view_menu.addAction(f"{prefix}{v_label}")
                 act.triggered.connect(lambda checked=False, k=v_key: self._set_view_mode_From_menu(k))
 
-            act_apply_all = self.view_menu.addAction("   ↳ 현재 보기 모드를 4개 패널 전체에 적용")
+            act_apply_all = self.view_menu.addAction("    ↳ 현재 보기 모드를 4개 패널 전체에 적용")
             act_apply_all.triggered.connect(lambda: self._apply_view_mode_all_panes(curr_mode))
 
             self.view_menu.addSeparator()
             is_det = self.inspector_pane.isVisible() and self.inspector_pane.mode == "details"
             is_prv = self.inspector_pane.isVisible() and self.inspector_pane.mode == "preview"
 
-            act_det_pane = self.view_menu.addAction(f"{'• ' if is_det else '   '}◨ 세부 정보 창")
-            act_prv_pane = self.view_menu.addAction(f"{'• ' if is_prv else '   '}◧ 미리 보기 창")
+            act_det_pane = self.view_menu.addAction(f"{'● ' if is_det else '    '}📋 세부 정보 창")
+            act_prv_pane = self.view_menu.addAction(f"{'● ' if is_prv else '    '}🖼️ 미리 보기 창")
             act_det_pane.triggered.connect(lambda: self.toggle_inspector_pane("details", not is_det))
             act_prv_pane.triggered.connect(lambda: self.toggle_inspector_pane("preview", not is_prv))
 
             self.view_menu.addSeparator()
-            show_sub = self.view_menu.addMenu("   표시")
+            show_sub = self.view_menu.addMenu("    표시")
 
-            act_icons = show_sub.addAction(f"{'✓ ' if self.show_icons else '   '}아이콘 및 썸네일 표시")
+            act_icons = show_sub.addAction(f"{'✓ ' if self.show_icons else '    '}아이콘 및 썸네일 표시")
             act_icons.triggered.connect(self._toggle_show_icons)
 
-            act_exts = show_sub.addAction(f"{'✓ ' if self.show_file_extensions else '   '}파일 확장명 표시")
+            act_exts = show_sub.addAction(f"{'✓ ' if self.show_file_extensions else '    '}파일 확장명 표시")
             act_exts.triggered.connect(self._toggle_show_extensions)
 
-            act_hidden = show_sub.addAction(f"{'✓ ' if self.show_hidden_files else '   '}숨긴 항목 표시")
+            act_hidden = show_sub.addAction(f"{'✓ ' if self.show_hidden_files else '    '}숨긴 항목 표시")
             act_hidden.triggered.connect(self._toggle_hidden_files)
 
             show_sub.addSeparator()
-            act_color = show_sub.addAction(f"{'✓ ' if self.color_filter_enabled else '   '}🎨 확장자별 색상 필터 켜기")
+            act_color = show_sub.addAction(f"{'✓ ' if self.color_filter_enabled else '    '}🎨 확장자별 색상 필터 켜기")
             act_color.triggered.connect(self._toggle_color_filter)
 
-            act_color_cfg = show_sub.addAction("   ⚙️ 확장자 색상 규칙 편집...")
+            act_color_cfg = show_sub.addAction("    ⚙️ 확장자 색상 규칙 편집...")
             act_color_cfg.triggered.connect(self._open_color_rules_dialog)
 
         def _populate_layout_menu(self) -> None:
             self.layout_menu.clear()
             layouts_meta = [
-                ("quad", "⊞ 4분할 (2×2 격자)", "Ctrl+1"),
-                ("2h", "◫ 2분할 (좌/우)", "Ctrl+2"),
-                ("2v", "⊟ 2분할 (상/하)", "Ctrl+3"),
-                ("3_left", "◧ 3분할 (좌1·우2)", "Ctrl+4"),
-                ("3_top", "⬒ 3분할 (상1·하2)", "Ctrl+5"),
-                ("single", "⬜ 1분할 (단일 최대화)", "Ctrl+6"),
+                ("quad", "4분할 (2×2 격자)", "Ctrl+1"),
+                ("2h", "2분할 (좌/우)", "Ctrl+2"),
+                ("2v", "2분할 (상/하)", "Ctrl+3"),
+                ("3_left", "3분할 (좌1·우2)", "Ctrl+4"),
+                ("3_top", "3분할 (상1·하2)", "Ctrl+5"),
+                ("single", "1분할 (단일 최대화)", "Ctrl+6"),
             ]
             for mode_key, text, shortcut_str in layouts_meta:
-                prefix = "• " if getattr(self, "current_layout_mode", "quad") == mode_key else "   "
+                prefix = "● " if getattr(self, "current_layout_mode", "quad") == mode_key else "    "
                 act = self.layout_menu.addAction(f"{prefix}{text}\t{shortcut_str}")
                 act.triggered.connect(lambda checked=False, m=mode_key: self.set_layout_mode(m))
 
@@ -2706,7 +3015,6 @@ def run_pyqt6_app() -> None:
                 self.inspector_pane.show()
                 self.btn_preview_toggle.setChecked(mode == "preview")
                 self.btn_details_toggle.setChecked(mode == "details")
-                # 현재 선택된 파일 즉시 반영
                 t = self.active_pane().current_tab()
                 sel = t.selected_file_paths() if t else []
                 self.inspector_pane.inspect_path(sel[0] if sel else (t.current_path if t else ""))
@@ -2827,7 +3135,7 @@ def run_pyqt6_app() -> None:
                 "3_top": "3분할(상1·하2)",
                 "single": "1분할(단일)",
             }
-            self.btn_layout_menu.setText(f"📐 레이아웃: {short_names.get(mode, '4분할')} ▾")
+            self.btn_layout_menu.setText(f"레이아웃: {short_names.get(mode, '4분할')} ▼")
             self._populate_layout_menu()
 
             for p in self.panes:
@@ -2955,6 +3263,7 @@ def run_pyqt6_app() -> None:
             self.dark_mode = not self.dark_mode
             self.btn_theme.setText("🌙 다크" if self.dark_mode else "☀️ 라이트")
             self._apply_theme()
+            self._refresh_toolbar_icons()
             self.refresh_all_panes()
             self.save_config()
 
@@ -3015,12 +3324,21 @@ def run_pyqt6_app() -> None:
             if t:
                 t.go_forward()
 
+        def keyPressEvent(self, event) -> None:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                t = self.active_pane().current_tab()
+                if t and not t.address_edit.hasFocus() and not t.filter_edit.hasFocus():
+                    t.activate_selected_or_current()
+                    event.accept()
+                    return
+            super().keyPressEvent(event)
+
         def _apply_theme(self) -> None:
             if self.dark_mode:
                 qss = """
                 QMainWindow, QDialog { background-color: #0F172A; color: #E2E8F0; }
-                QToolBar { background-color: #1E293B; border-bottom: 1px solid #334155; spacing: 4px; padding: 3px; }
-                QToolButton { background-color: transparent; color: #E2E8F0; border: 1px solid transparent; border-radius: 5px; padding: 4px 8px; font-size: 12px; }
+                QToolBar { background-color: #1E293B; border-bottom: 1px solid #334155; spacing: 5px; padding: 4px; }
+                QToolButton { background-color: transparent; color: #E2E8F0; border: 1px solid transparent; border-radius: 5px; padding: 5px 9px; font-size: 13px; }
                 QToolButton:hover { background-color: #334155; border: 1px solid #475569; }
                 QToolButton:checked { background-color: #2563EB; color: #FFFFFF; font-weight: bold; }
                 QToolButton::menu-indicator { image: none; width: 0px; }
@@ -3028,7 +3346,7 @@ def run_pyqt6_app() -> None:
                 QFrame#ExplorerPane[activePane="true"] { border: 2px solid #38BDF8; }
                 QLabel#PaneBadge { background-color: #2563EB; color: #FFFFFF; font-weight: bold; border-radius: 4px; padding: 1px 5px; }
                 QLabel#PaneTitlePath, QLabel#PaneSummaryLabel { color: #94A3B8; font-size: 11px; padding: 2px 4px; }
-                QLineEdit, QPlainTextEdit { background-color: #0F172A; color: #F8FAFC; border: 1px solid #475569; border-radius: 4px; padding: 3px 6px; selection-background-color: #2563EB; }
+                QLineEdit, QPlainTextEdit { background-color: #0F172A; color: #F8FAFC; border: 1px solid #475569; border-radius: 4px; padding: 4px 6px; selection-background-color: #2563EB; font-size: 12px; }
                 QLineEdit:focus { border: 1px solid #38BDF8; }
                 QTabWidget::pane { border: 1px solid #334155; background-color: #0F172A; }
                 QTabBar::tab { background-color: #1E293B; color: #94A3B8; border: 1px solid #334155; border-bottom: none; border-top-left-radius: 5px; border-top-right-radius: 5px; padding: 5px 10px; margin-right: 2px; font-size: 12px; }
@@ -3038,15 +3356,15 @@ def run_pyqt6_app() -> None:
                 QSplitter::handle { background-color: #334155; }
                 QSplitter::handle:hover { background-color: #38BDF8; }
                 QStatusBar { background-color: #1E293B; color: #CBD5E1; border-top: 1px solid #334155; }
-                QMenu { background-color: #1E293B; color: #F8FAFC; border: 1px solid #475569; padding: 4px; }
+                QMenu { background-color: #1E293B; color: #F8FAFC; border: 1px solid #475569; padding: 4px; font-size: 12px; }
                 QMenu::item { padding: 5px 22px 5px 12px; border-radius: 4px; }
                 QMenu::item:selected { background-color: #2563EB; color: #FFFFFF; }
                 """
             else:
                 qss = """
                 QMainWindow, QDialog { background-color: #F1F5F9; color: #0F172A; }
-                QToolBar { background-color: #FFFFFF; border-bottom: 1px solid #CBD5E1; spacing: 4px; padding: 3px; }
-                QToolButton { background-color: transparent; color: #1E293B; border: 1px solid transparent; border-radius: 5px; padding: 4px 8px; font-size: 12px; }
+                QToolBar { background-color: #FFFFFF; border-bottom: 1px solid #CBD5E1; spacing: 5px; padding: 4px; }
+                QToolButton { background-color: transparent; color: #1E293B; border: 1px solid transparent; border-radius: 5px; padding: 5px 9px; font-size: 13px; }
                 QToolButton:hover { background-color: #E2E8F0; border: 1px solid #CBD5E1; }
                 QToolButton:checked { background-color: #2563EB; color: #FFFFFF; font-weight: bold; }
                 QToolButton::menu-indicator { image: none; width: 0px; }
@@ -3054,7 +3372,7 @@ def run_pyqt6_app() -> None:
                 QFrame#ExplorerPane[activePane="true"] { border: 2px solid #2563EB; }
                 QLabel#PaneBadge { background-color: #2563EB; color: #FFFFFF; font-weight: bold; border-radius: 4px; padding: 1px 5px; }
                 QLabel#PaneTitlePath, QLabel#PaneSummaryLabel { color: #475569; font-size: 11px; padding: 2px 4px; }
-                QLineEdit, QPlainTextEdit { background-color: #F8FAFC; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 4px; padding: 3px 6px; }
+                QLineEdit, QPlainTextEdit { background-color: #F8FAFC; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
                 QLineEdit:focus { border: 1px solid #2563EB; }
                 QTabWidget::pane { border: 1px solid #CBD5E1; background-color: #FFFFFF; }
                 QTabBar::tab { background-color: #E2E8F0; color: #475569; border: 1px solid #CBD5E1; border-bottom: none; border-top-left-radius: 5px; border-top-right-radius: 5px; padding: 5px 10px; margin-right: 2px; font-size: 12px; }
@@ -3064,13 +3382,13 @@ def run_pyqt6_app() -> None:
                 QSplitter::handle { background-color: #CBD5E1; }
                 QSplitter::handle:hover { background-color: #2563EB; }
                 QStatusBar { background-color: #FFFFFF; color: #334155; border-top: 1px solid #CBD5E1; }
-                QMenu { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; padding: 4px; }
+                QMenu { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; padding: 4px; font-size: 12px; }
                 QMenu::item { padding: 5px 22px 5px 12px; border-radius: 4px; }
                 QMenu::item:selected { background-color: #2563EB; color: #FFFFFF; }
                 """
             self.setStyleSheet(qss)
 
-    app = QApplication(sys.argv)
+    app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("PyQuadDir Desktop Explorer")
     font = QFont("Malgun Gothic", 9) if platform.system() == "Windows" else QFont("Sans Serif", 10)
     app.setFont(font)
@@ -3081,7 +3399,7 @@ def run_pyqt6_app() -> None:
 
 
 # ===========================================================================
-# 2. 내장 Tkinter (ttk) 폴백 엔진 (드롭다운 메뉴 + 상위 폴더 선택 제외 반영)
+# 2. 내장 Tkinter (ttk) 폴백 엔진 (Ctrl+마우스 휠 행 높이 확대/축소 지원)
 # ===========================================================================
 def run_tkinter_app() -> None:
     import tkinter as tk
@@ -3103,10 +3421,10 @@ def run_tkinter_app() -> None:
             nav = ttk.Frame(self)
             nav.pack(fill=tk.X, padx=3, pady=3)
 
-            ttk.Button(nav, text="◀", width=3, command=self.go_back).pack(side=tk.LEFT, padx=1)
-            ttk.Button(nav, text="▶", width=3, command=self.go_forward).pack(side=tk.LEFT, padx=1)
-            ttk.Button(nav, text="▲", width=3, command=self.go_up).pack(side=tk.LEFT, padx=1)
-            ttk.Button(nav, text="⟳", width=3, command=self.refresh).pack(side=tk.LEFT, padx=1)
+            ttk.Button(nav, text="⬅️", width=3, command=self.go_back).pack(side=tk.LEFT, padx=1)
+            ttk.Button(nav, text="➡️", width=3, command=self.go_forward).pack(side=tk.LEFT, padx=1)
+            ttk.Button(nav, text="⬆️", width=3, command=self.go_up).pack(side=tk.LEFT, padx=1)
+            ttk.Button(nav, text="🔄", width=3, command=self.refresh).pack(side=tk.LEFT, padx=1)
 
             self.addr_var = tk.StringVar(value=self.current_path)
             addr_entry = ttk.Entry(nav, textvariable=self.addr_var)
@@ -3145,15 +3463,23 @@ def run_tkinter_app() -> None:
 
             self.tree.bind("<FocusIn>", lambda e: self.app.set_active_pane(self.pane_idx))
             self.tree.bind("<Double-1>", self._on_double_click)
+            self.tree.bind("<Return>", self._on_enter_key)
+            self.tree.bind("<KP_Enter>", self._on_enter_key)
+            self.tree.bind("<BackSpace>", lambda e: self.go_up())
             self.tree.bind("<ButtonPress-1>", self._on_drag_start)
             self.tree.bind("<ButtonRelease-1>", self._on_drag_drop)
             self.tree.bind("<Button-3>", self._on_right_click)
             self.tree.bind("<Control-a>", self._on_select_all)
             self.tree.bind("<Control-A>", self._on_select_all)
+            self.tree.bind("<Control-MouseWheel>", self._on_ctrl_wheel)
             self.tree.bind("<<TreeviewSelect>>", self._unselect_parent_if_multi)
 
+        def _on_ctrl_wheel(self, event) -> str:
+            step = 1 if event.delta > 0 else -1
+            self.app.step_font_zoom(step)
+            return "break"
+
         def _on_select_all(self, event) -> str:
-            """Ctrl+A 전체 선택 시 '..parent..' 항목을 제외하고 선택합니다."""
             items = [i for i in self.tree.get_children() if i != "..parent.."]
             self.tree.selection_set(items)
             return "break"
@@ -3266,6 +3592,25 @@ def run_tkinter_app() -> None:
         def selected_paths(self) -> List[str]:
             return [iid for iid in self.tree.selection() if iid != "..parent.." and os.path.exists(iid)]
 
+        def _on_enter_key(self, event) -> str:
+            sel = self.tree.selection()
+            if not sel:
+                focus_id = self.tree.focus()
+                if focus_id:
+                    sel = (focus_id,)
+            if not sel:
+                return "break"
+            first = sel[0]
+            if first == "..parent..":
+                self.go_up()
+            elif os.path.isdir(first):
+                self.navigate_to(first)
+            else:
+                for iid in sel:
+                    if iid != "..parent.." and os.path.isfile(iid):
+                        open_path_with_os(iid)
+            return "break"
+
         def _on_double_click(self, event) -> None:
             item_id = self.tree.identify_row(event.y)
             if item_id == "..parent..":
@@ -3356,7 +3701,7 @@ def run_tkinter_app() -> None:
     class TkQDirApp:
         def __init__(self) -> None:
             self.root = tk.Tk()
-            self.root.title("PyQuadDir Desktop Explorer v2.0 (Tkinter Engine)")
+            self.root.title("PyQuadDir Desktop Explorer (Tkinter Engine)")
             self.root.geometry("1440x880")
 
             self.config = load_app_config()
@@ -3370,28 +3715,32 @@ def run_tkinter_app() -> None:
             )
             self.active_pane_idx = 0
             self.drag_source_tab: Optional[TkDirectoryTab] = None
+            self.font_size = 10
+            self.style = ttk.Style(self.root)
 
             self._build_ui()
+
+        def step_font_zoom(self, step: int) -> None:
+            self.font_size = max(9, min(18, self.font_size + step))
+            self.style.configure("Treeview", font=("Malgun Gothic", self.font_size), rowheight=self.font_size * 2 + 8)
 
         def _build_ui(self) -> None:
             top_bar = ttk.Frame(self.root)
             top_bar.pack(fill=tk.X, padx=4, pady=3)
 
-            # 레이아웃 드롭다운 메뉴버튼
-            mb_layout = ttk.Menubutton(top_bar, text="📐 레이아웃 ▾")
+            mb_layout = ttk.Menubutton(top_bar, text="📐 레이아웃 ▼")
             m_layout = tk.Menu(mb_layout, tearoff=0)
             for key, label in [
-                ("quad", "⊞ 4분할 (2×2)"),
-                ("2h", "◫ 2분할 (좌/우)"),
-                ("2v", "⊟ 2분할 (상/하)"),
-                ("single", "⬜ 1분할 (단일)"),
+                ("quad", "4분할 (2×2)"),
+                ("2h", "2분할 (좌/우)"),
+                ("2v", "2분할 (상/하)"),
+                ("single", "1분할 (단일)"),
             ]:
                 m_layout.add_command(label=label, command=lambda m=key: self.set_layout(m))
             mb_layout["menu"] = m_layout
             mb_layout.pack(side=tk.LEFT, padx=3)
 
-            # 드라이브 드롭다운 메뉴버튼
-            mb_drive = ttk.Menubutton(top_bar, text="💽 드라이브 ▾")
+            mb_drive = ttk.Menubutton(top_bar, text="💽 드라이브 ▼")
             m_drive = tk.Menu(mb_drive, tearoff=0)
             for d in get_mounted_drives():
                 r = str(d["root"])

@@ -1,23 +1,16 @@
 # PyQuadDir Project Status
 
-- **Project Slug**: `pyquaddir`
+- **Project ID**: `pyquaddir`
 - **Canonical Workspace Path**: `D:\workspace\projects\active\pyquaddir`
-- **Repository**: `https://github.com/shinjaehyun20/PyQuadDir`
-- **Version**: `v2.0.0`
-- **License**: MIT License
-- **Status**: Active / Public Release
+- **Desktop Shortcut**: `%USERPROFILE%\Desktop\PyQuadDir.lnk` -> `D:\workspace\projects\active\pyquaddir\dist\PyQuadDir.exe`
+- **GitHub Repository**: `https://github.com/shinjaehyun20/PyQuadDir` (Public, MIT License)
+- **Current Version**: `v2.2.0` (`2026-10-22`)
+- **Status**: `ACTIVE / PRODUCTION`
 
-## Changelog
-
-### v2.0.0 (2026-10-22)
-- **Windows 11 Explorer-Style Command Bar**: Added `[⊕ 새로 만들기 ▾]`, Cut/Copy/Paste/Rename/Delete buttons, `[📤 다른 패널로 전송 ▾]`, `[⇅ 정렬 ▾]` (Name, Modified, Type, Size, Extension, Created + Grouping by Type/Date/Size), and `[⊞ 보기 ▾]` dropdown menus.
-- **Compact Top Bar & Full-Width Favorites Bar**: Consolidated Layout and Drive selectors into compact dropdown menus so the Favorites (`⭐`) bar spans the full window width.
-- **8 View Modes & Live Image Thumbnail Caching**: Added Extra Large/Large/Medium/Small Icons, List, Details, Tiles, and Content view modes with in-memory image thumbnail rendering (`.png`, `.jpg`, `.webp`, `.gif`, `.bmp`, `.svg`, `.ico`, `.tif`).
-- **Right-Side Preview & Details Inspector Pane**: Added toggleable `[◧ 미리 보기]` and `[◨ 세부 정보]` inspector panes for live image/resolution preview and text/code preview.
-- **Parent Folder (`..`) Selection Guard**: Excluded `📁 .. (상위 폴더)` when selecting all items (`Ctrl+A`) or multi-selecting via drag.
-
-### v1.0.0 (2026-10-22)
-- Initial open-source release of **PyQuadDir Desktop Explorer**.
-- Added Triple-Engine runtime compatibility (`PySide6`, `PyQt6`, and built-in `Tkinter` fallback).
-- Added 6 dynamic quad/split view layouts (`Ctrl+1` ~ `Ctrl+6`), per-pane multi-tab browsing, cross-pane drag-and-drop file transfer with conflict resolution, and customizable file extension color highlighting.
-- Added zero-dependency pure-Python `.ico` icon generator and `PyInstaller` single-executable (`PyQuadDir.exe`) builder (`build_exe.py`).
+## Summary of Capabilities (v2.2.0)
+- **Triple-Engine Support**: Automatic `PySide6` / `PyQt6` detection with built-in `Tkinter (ttk)` zero-dependency fallback (`--tk`).
+- **High-Visibility Vector Icon Command Bar (v2.2)**: Custom antialiased 20×20px Windows 11-style color vector icons rendered via `QPainter` (`create_ui_icon`) + full-width Favorites Bar (`⭐`).
+- **`Ctrl + Mouse Wheel` Real-Time Zoom (v2.2)**: Smooth 8-stage view transition (`details` → `list` → `content` → `tiles` → `small_icons` → `medium_icons` → `large_icons` → `extra_large_icons` up to 220px).
+- **Keyboard-First Navigation (v2.2)**: Full `Enter`/`Return` folder navigation & file execution and `Backspace` parent folder navigation across both `FileTableView` and `FileIconListView`.
+- **Portfolio & Marketing Visual Showcase**: Privacy-safe (`Zero-PII`) Hero Banner (`assets/social-preview-banner.png`), animated action GIF (`assets/demo-quad-action.gif`), Dark/Light high-DPI screenshots (`assets/demo-dark.png`, `assets/demo-light.png`), and Mermaid 3-layer system architecture documentation.
+- **Standalone Portable Build**: `build_exe.py` builds a standalone zero-install Windows executable (`dist/PyQuadDir.exe`).
