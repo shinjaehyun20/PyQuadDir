@@ -1,29 +1,30 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-PyQuadDir Desktop Explorer v2.2 (Quad-View Multi-Tab File Manager for Windows)
-==============================================================================
-실제 Windows 로컬 드라이브(C:\, D:\ 등)와 파일 시스템을 직접 제어하는
-데스크톱 4분할(Quad) 다중 탭 파일 탐색기입니다.
-(Inspired by the quad-pane file manager concept of Q-Dir)
+PyQuadDir Desktop Explorer v2.4 (Quad-View File Manager for Windows)
+================================================================
+실제 Windows 로컬 드라이브(C:\, D:\) 및 Google Drive 데스크톱 가상 드라이브(G:\ 등)를
+직접 제어하는 데스크톱 4분할(Quad) 다중 탭 파일 탐색기입니다.
 
-[트리플 엔진 지원 — MIT 라이선스 호환]
-- 기본 Qt 엔진 (PySide6 / PyQt6 자동 감지): OS 네이티브 파일 아이콘, 실시간 이미지 썸네일,
-  고시인성 Windows 11 벡터 아이콘(QPainter), Ctrl+마우스 휠 8단계 뷰/썸네일 줌 전환
-- 내장 폴백 엔진 (Tkinter ttk): 외부 패키지 설치 없이 Python 표준 라이브러리만으로도 즉시 구동
-
-[v2.2 주요 업데이트]
-1. 고시인성 벡터 아이콘(QPainter QIcon) 렌더링 & 아이콘 크기 확대:
-   - 작아서 보이지 않던 특수문자(⊕, ⇅, ⊞, ◧, ◨, ◀, ▶, ▲, ⟳)를 Windows 11 스타일의
-     선명한 컬러 벡터 그래픽 아이콘(20x20px)으로 전면 교체하고 목록 기본 아이콘 크기 확대
-2. Ctrl + 마우스 휠 스크롤 보기 모드(썸네일 크기) 실시간 전환:
-   - 패널 위에서 [Ctrl + 마우스 휠 위로] 스크롤 시:
-     자세히 → 목록 → 내용 → 타일 → 작은 아이콘 → 보통 아이콘 → 큰 아이콘 → 아주 큰 아이콘(최대 220px) 순으로 확대 전환
-   - [Ctrl + 마우스 휠 아래로] 스크롤 시 역순으로 축소/상세 보기로 즉시 전환
-3. 파일/폴더 선택 후 Enter 키 즉시 실행 및 진입:
-   - 메인 Enter 및 숫자패드 Enter로 폴더 진입 / 파일 실행, Backspace로 상위 폴더 이동
-4. 상단 레이아웃·드라이브 드롭다운 메뉴화 & 즐겨찾기 전용 바 확장
-5. 전체 선택(Ctrl+A) 시 상위 폴더('..') 선택 자동 제외
+[v2.4 핵심 업데이트 — HTML / Excel(.xlsx) / PDF 실행 불능 및 Google Drive(G:) 근본 원인 해결]
+1. 가상 드라이브 경로 왜곡(`Path.resolve()`) 전면 제거 & 표준 Win32 경로 유지:
+   - 기존 코드에서 폴더 이동 시 호출하던 `Path.resolve()`가 Google Drive(G:) 가상 파일 시스템에서
+     `\\?\` 디바이스 경로 또는 내부 볼륨 경로로 변형되어, Excel·Acrobat·Chrome이 파일 확장자/형식을
+     인식하지 못하던 문제를 `safe_norm_path()`로 전면 교체해 해결했습니다.
+2. 클라우드 스트리밍(G:) 사전 동기화(Full Pre-hydration) & 로컬 캐시(C:) 우회 실행 엔진:
+   - Google Drive(G:)가 오프라인/스트리밍 지연 상태일 때 로컬에 이미 캐시된 가벼운 `.md` 파일은 열리지만,
+     아직 다운로드되지 않은 `.html`, `.pdf`, `.xlsx`는 0 바이트 또는 불완전 스트림으로 전달되어
+     Chrome에서는 빈 화면, Acrobat/Excel에서는 "파일이 손상되었거나 확장명이 잘못되었다"는 오류가 발생합니다.
+   - 실행 전 파일 스트림을 먼저 읽어 동기화(Hydration)를 유도하고, 가상 드라이브 핸들 충돌 시
+     로컬 임시 캐시(`%TEMP%\PyQuadDir_OpenCache`)로 복사 후 실행하는 우회 모드를 지원합니다.
+3. 파일 매직 헤더(Magic Bytes) 정밀 진단기 (`diagnose_file_health`):
+   - `.pdf`(`%PDF-`), `.xlsx`(`PK\x03\x04` ZIP), `.xls`(`D0 CF 11 E0` OLE2), 기업용 DRM 암호화(`FASOO`,
+     `SoftCamp`, `MarkAny` 등 — 감리/PMO 문서에서 빈번), 확장자 불일치(실제 내용은 HTML/XLS인데 확장자만
+     .xlsx인 경우)를 1ms 만에 판별하여 왜 안 열리는지 정확한 원인과 해결책을 즉시 안내합니다.
+4. 내장 Excel(`.xlsx`) 표 뷰어 & 내장 HTML/텍스트 뷰어 탑재:
+   - 외부 프로그램 없이도 `.xlsx` 엑셀 시트 내용, `.html` 웹 문서, `.md`/`.txt`를 PyQuadDir 내부에서
+     즉시 표와 렌더링 화면으로 열람할 수 있습니다.
+5. 주소창 `file:///` 및 `%20` URL 인코딩 자동 해독 & 다단계 안전 삭제(`safe_delete_path`) 지원.
 """
 
 from __future__ import annotations
@@ -36,6 +37,10 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
+import urllib.parse
+import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -49,6 +54,9 @@ LEGACY_CONFIG_PATH = Path.home() / ".qdir_py_config.json"
 IMAGE_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".svg", ".tif", ".tiff"
 }
+
+HTML_EXTENSIONS = {".html", ".htm", ".xhtml"}
+EXCEL_EXTENSIONS = {".xlsx", ".xlsm"}
 
 TEXT_PREVIEW_EXTENSIONS = {
     ".txt", ".md", ".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".htm", ".css",
@@ -89,7 +97,7 @@ DEFAULT_COLOR_RULES: Dict[str, Dict[str, object]] = {
         "enabled": True,
     },
     "소스 코드 및 설정 (Code)": {
-        "extensions": [".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".css", ".json", ".xml", ".yaml", ".yml", ".c", ".cpp", ".h", ".java", ".cs", ".go", ".rs", ".sql"],
+        "extensions": [".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".htm", ".css", ".json", ".xml", ".yaml", ".yml", ".c", ".cpp", ".h", ".java", ".cs", ".go", ".rs", ".sql"],
         "color_dark": "#A3E635",   # 라임 그린
         "color_light": "#3F6212",
         "enabled": True,
@@ -119,7 +127,6 @@ VIEW_MODES_META: List[Tuple[str, str, int]] = [
     ("content", "내용", 40),
 ]
 
-# Ctrl + 마우스 휠 확대/축소 순서 (아래로 스크롤 <-> 위로 스크롤)
 ZOOM_WHEEL_ORDER: List[str] = [
     "details",            # 1단계: 자세히 (테이블)
     "list",               # 2단계: 목록
@@ -134,11 +141,545 @@ ZOOM_WHEEL_ORDER: List[str] = [
 VIEW_MODE_LABELS: Dict[str, str] = {k: v for k, v, _ in VIEW_MODES_META}
 
 
-def load_app_config() -> Dict[str, object]:
-    for candidate in (CONFIG_PATH, LEGACY_CONFIG_PATH):
-        if candidate.exists():
+# ---------------------------------------------------------------------------
+# 경로 정규화 & URL 디코딩 & 가상 드라이브(Google Drive G:) 안전 헬퍼
+# ---------------------------------------------------------------------------
+def safe_norm_path(path_str: str) -> str:
+    """
+    Google Drive(G:) 등 가상 드라이브에서 `Path.resolve()` 호출 시 발생하는
+    Reparse Point 우회 및 `\\\\?\\` 확장 경로 왜곡을 방지하고 안전하게 표준 경로를 반환합니다.
+    """
+    if not path_str:
+        return ""
+    s = str(path_str).strip()
+    if s.startswith("\\\\?\\UNC\\"):
+        s = "\\\\" + s[8:]
+    elif s.startswith("\\\\?\\"):
+        s = s[4:]
+    return os.path.normpath(os.path.abspath(s))
+
+
+def normalize_user_input_path(raw_input: str) -> str:
+    """
+    사용자가 주소창에 입력한 문자열을 실제 로컬/가상 드라이브 경로로 변환합니다.
+    - `file:///G:/%EB%82%B4%20%EB%93%9C%EB%9D%BC%EC%9D%B4%EB%B8%8C/.../400.html` 지원
+    - `G:/내%20드라이브/02.%20Knowledge/.../400.html` 지원
+    """
+    s = raw_input.strip().strip('"').strip("'")
+    if not s:
+        return ""
+
+    if s.lower().startswith("file://"):
+        parsed = urllib.parse.urlparse(s)
+        path_part = urllib.parse.unquote(parsed.path or "")
+        netloc_part = urllib.parse.unquote(parsed.netloc or "")
+        if netloc_part and netloc_part.lower() != "localhost":
+            if netloc_part.endswith(":"):
+                s = f"{netloc_part}{path_part}"
+            else:
+                s = f"//{netloc_part}{path_part}"
+        else:
+            if len(path_part) >= 3 and path_part[0] == "/" and path_part[2] == ":":
+                s = path_part[1:]
+            else:
+                s = path_part
+    else:
+        if "%" in s:
+            s = os.path.expandvars(s)
             try:
-                return json.loads(candidate.read_text(encoding="utf-8"))
+                unquoted = urllib.parse.unquote(s)
+                if unquoted != s:
+                    s = unquoted
+            except Exception:
+                pass
+
+    s = os.path.expandvars(os.path.expanduser(s))
+    if platform.system() == "Windows":
+        s = s.replace("/", "\\")
+        if len(s) == 2 and s[1] == ":":
+            s += "\\"
+    return os.path.normpath(s)
+
+
+# ---------------------------------------------------------------------------
+# 파일 매직 헤더(Magic Bytes) & 클라우드 스트리밍 상태 정밀 진단기
+# ---------------------------------------------------------------------------
+def diagnose_file_health(file_path: str) -> Dict[str, object]:
+    """
+    파일을 열기 전 실제 바이트 헤더와 Windows 클라우드 파일 속성을 정밀 검사합니다.
+    반환 딕셔너리:
+      - status: 'ok' | 'empty' | 'cloud_offline' | 'drm_encrypted' | 'ext_mismatch' | 'corrupted'
+      - title: 요약 제목
+      - detail: 상세 원인 및 해결 방법 설명
+      - suggested_ext: 확장자 불일치 시 실제 포맷 확장자 (예: '.xls', '.html')
+      - header_hex: 첫 16바이트 HEX 문자열
+    """
+    norm_p = safe_norm_path(file_path)
+    p = Path(norm_p)
+    ext = p.suffix.lower()
+
+    # Windows 파일 속성 확인 (Cloud Offline / Recall on Data Access 여부)
+    is_cloud_placeholder = False
+    if platform.system() == "Windows":
+        try:
+            attrs = ctypes.windll.kernel32.GetFileAttributesW(ctypes.c_wchar_p(norm_p))
+            if attrs != -1:
+                # FILE_ATTRIBUTE_OFFLINE(0x1000) | FILE_ATTRIBUTE_RECALL_ON_OPEN(0x40000) | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS(0x400000) | FILE_ATTRIBUTE_UNPINNED(0x100000)
+                if attrs & (0x1000 | 0x40000 | 0x400000 | 0x100000):
+                    is_cloud_placeholder = True
+        except Exception:
+            pass
+
+    try:
+        stat_size = p.stat().st_size
+    except Exception:
+        stat_size = -1
+
+    try:
+        with open(norm_p, "rb") as f:
+            head = f.read(4096)
+    except OSError as exc:
+        win_err = getattr(exc, "winerror", None)
+        return {
+            "status": "cloud_offline",
+            "title": "☁️ 클라우드 파일 스트리밍(다운로드) 실패",
+            "detail": (
+                f"'{p.name}' 파일은 현재 PC에 저장되지 않은 '구글 드라이브 온라인 전용(스트리밍)' 파일입니다.\n"
+                f"현재 Google Drive 데스크톱 프로그램이 오프라인이거나 연결이 끊겨 있어(WinError {win_err}) "
+                f"실제 파일 데이터를 가져올 수 없습니다.\n\n"
+                f"• 이미 로컬 캐시에 저장된 마크다운(.md) 등은 열리지만, 아직 다운로드되지 않은 HTML·엑셀·PDF는 "
+                f"데이터를 읽지 못해 빈 화면이나 '손상된 파일' 오류가 발생합니다.\n"
+                f"• 해결: 작업 표시줄 우측 하단의 [Google Drive] 앱을 재시작하여 온라인 상태로 연결해 주세요."
+            ),
+            "suggested_ext": "",
+            "header_hex": "",
+        }
+
+    header_hex = head[:16].hex(" ").upper() if head else "(0 Bytes)"
+
+    # 1) 0 바이트 파일이거나, 메타데이터 크기는 있는데 실제 읽힌 바이트가 0인 경우 (클라우드 스트리밍 차단)
+    if len(head) == 0:
+        if stat_size > 0 or is_cloud_placeholder:
+            return {
+                "status": "cloud_offline",
+                "title": "☁️ 구글 드라이브 스트리밍 데이터 미수신 (0 바이트 응답)",
+                "detail": (
+                    f"'{p.name}' 파일의 목록상 크기는 {format_size(stat_size)}이지만, "
+                    f"실제 파일 데이터를 읽었을 때 0 바이트가 반환되었습니다.\n\n"
+                    f"• 원인: Google Drive(G:) 가상 드라이브가 현재 오프라인/연결 끊김 상태여서 클라우드에서 파일 본문을 내려받지 못했습니다.\n"
+                    f"• 그래서 크롬에서는 흰 빈 화면으로 뜨고, 엑셀과 아크로뱃에서는 '파일이 손상되었다'고 표시됩니다.\n"
+                    f"• 해결: Google Drive 데스크톱 앱의 인터넷 연결/로그인 상태를 확인하거나 해당 폴더를 '오프라인 사용 가능'으로 설정해 주세요."
+                ),
+                "suggested_ext": "",
+                "header_hex": header_hex,
+            }
+        return {
+            "status": "empty",
+            "title": "⚠️ 내용이 비어 있는 0 바이트(0 B) 파일",
+            "detail": (
+                f"'{p.name}' 파일은 실제 크기가 0 B인 빈 파일입니다.\n"
+                f"내용이 전혀 없기 때문에 브라우저(HTML)에서는 빈 화면으로 열리고, "
+                f"엑셀(.xlsx)이나 아크로뱃(.pdf)에서는 형식 오류(손상된 파일)가 발생합니다."
+            ),
+            "suggested_ext": "",
+            "header_hex": header_hex,
+        }
+
+    # 2) 모든 바이트가 0x00(NULL)으로만 채워진 미동기화 플레이스홀더 검사
+    if len(head) >= 64 and all(b == 0 for b in head):
+        return {
+            "status": "cloud_offline",
+            "title": "☁️ 미동기화 클라우드 파일 (NULL 블록 감지)",
+            "detail": (
+                f"'{p.name}' 파일의 데이터 영역이 모두 빈 값(0x00)으로 채워져 있습니다.\n"
+                f"구글 드라이브(G:) 동기화가 완료되지 않았거나 오프라인 상태에서 캐시가 깨진 파일입니다."
+            ),
+            "suggested_ext": "",
+            "header_hex": header_hex,
+        }
+
+    # 3) 기업/공공기관 문서 보안(DRM) 암호화 시그니처 검사 (감리/PMO 문서에서 매우 흔함)
+    head_upper = head[:256].upper()
+    drm_markers = [
+        (b"FASOO", "Fasoo (파수닷컴) 문서보안 DRM"),
+        (b"FSD", "Fasoo (파수닷컴) 문서보안 DRM"),
+        (b"SOFTCAMP", "SoftCamp (소프트캠프) 문서보안 DRM"),
+        (b"SCDSA", "SoftCamp (소프트캠프) 문서보안 DRM"),
+        (b"MARKANY", "MarkAny (마크애니) 문서보안 DRM"),
+        (b"DOCUMENT SAFER", "MarkAny Document Safer DRM"),
+        (b"NASCA", "NASCA 문서보안 DRM"),
+    ]
+    for marker_bytes, drm_name in drm_markers:
+        if marker_bytes in head_upper:
+            return {
+                "status": "drm_encrypted",
+                "title": f"🔒 기업/기관 문서보안(DRM) 암호화 파일 ({drm_name})",
+                "detail": (
+                    f"'{p.name}' 파일은 [{drm_name}]으로 암호화되어 있는 보안 문서입니다.\n"
+                    f"(파일 헤더: {header_hex})\n\n"
+                    f"• 원인: 발주처/감리단/사내 PC의 DRM 에이전트가 설치되지 않은 환경에서 열면 "
+                    f"엑셀(Excel)이나 아크로뱃(Acrobat)이 암호화된 헤더를 읽지 못해 '파일 형식 또는 확장명이 잘못되었다'거나 '손상되었다'고 표시합니다."
+                ),
+                "suggested_ext": "",
+                "header_hex": header_hex,
+            }
+
+    # 4) PDF 파일(.pdf) 매직 헤더 검사 (%PDF-)
+    if ext == ".pdf":
+        if b"%PDF-" not in head[:1024]:
+            # 혹시 HTML 에러 페이지가 .pdf 이름으로 저장된 경우인지 확인
+            if b"<HTML" in head_upper or b"<!DOCTYPE HTML" in head_upper:
+                return {
+                    "status": "ext_mismatch",
+                    "title": "⚠️ 확장자 불일치 (.pdf 이름이지만 실제 내용은 웹 HTML 문서)",
+                    "detail": (
+                        f"'{p.name}' 파일은 확장자가 .pdf로 되어 있으나, 실제 내부 데이터는 PDF(`%PDF-`)가 아니라 "
+                        f"웹 페이지(HTML) 코드입니다.\n(헤더: {header_hex})\n\n"
+                        f"• 원인: 웹사이트나 클라우드에서 다운로드할 때 로그인/오류 웹페이지가 .pdf 확장자로 저장된 경우입니다.\n"
+                        f"• 아래 [🌐 내장 뷰어로 내용 확인] 버튼을 누르면 파일 안에 어떤 텍스트/웹페이지가 들어있는지 바로 볼 수 있습니다."
+                    ),
+                    "suggested_ext": ".html",
+                    "header_hex": header_hex,
+                }
+            if head[:4] == b"PK\x03\x04":
+                return {
+                    "status": "ext_mismatch",
+                    "title": "⚠️ 확장자 불일치 (.pdf 이름이지만 실제 내용은 ZIP/오피스 포맷)",
+                    "detail": (
+                        f"'{p.name}' 파일은 확장자가 .pdf이지만 실제 파일 헤더는 ZIP/Office(`PK\\x03\\x04`) 형식입니다.\n"
+                        f"Adobe Acrobat에서는 열리지 않으며 확장자를 원래 형식으로 변경해야 합니다."
+                    ),
+                    "suggested_ext": ".zip",
+                    "header_hex": header_hex,
+                }
+            return {
+                "status": "corrupted",
+                "title": "⚠️ 유효한 PDF 헤더(`%PDF-`)가 없는 손상/암호화 파일",
+                "detail": (
+                    f"'{p.name}' 파일 시작 부분에 표준 PDF 시그니처(`%PDF-`)가 존재하지 않습니다.\n"
+                    f"• 실제 파일 시작 바이트(HEX): {header_hex}\n\n"
+                    f"다운로드 중 파일이 깨졌거나 문서 보안(DRM)으로 암호화된 파일일 가능성이 높습니다."
+                ),
+                "suggested_ext": "",
+                "header_hex": header_hex,
+            }
+
+    # 5) Excel 파일(.xlsx) 매직 헤더 검사 (표준 .xlsx는 PK\x03\x04 ZIP 아카이브여야 함!)
+    if ext in (".xlsx", ".xlsm"):
+        if head[:4] == b"\xd0\xcf\x11\xe0":
+            # 구형 Excel 97-2003 (.xls) 또는 비밀번호/IRM 암호화된 오피스 문서(OLE2 Compound Document)
+            return {
+                "status": "ext_mismatch",
+                "title": "⚠️ 구형 엑셀(.xls) 형식 또는 암호 보호된 문서 (확장자 불일치)",
+                "detail": (
+                    f"'{p.name}' 파일은 확장자가 `.xlsx`로 되어 있지만, 실제 내부 바이너리 구조는 "
+                    f"ZIP(`.xlsx`)이 아니라 **OLE2 복합 문서(`.xls` 구형 엑셀 또는 암호 설정 문서, 헤더: D0 CF 11 E0)**입니다!\n\n"
+                    f"• 원인: 최신 Microsoft Excel은 실제 구조가 `.xls`인 파일의 이름만 `.xlsx`로 되어 있으면 보안 정책상 "
+                    f"'파일 형식 또는 파일 확장명이 잘못되어 열 수 없습니다'라며 실행을 차단합니다.\n"
+                    f"• 해결: 아래 [🔧 .xls 확장자로 사본 만들어 바로 열기] 버튼을 누르면 즉시 정상 실행됩니다!"
+                ),
+                "suggested_ext": ".xls",
+                "header_hex": header_hex,
+            }
+        if b"<HTML" in head_upper or b"<TABLE" in head_upper or b"<!DOCTYPE" in head_upper:
+            # 웹 시스템(PMO/ERP)에서 엑셀 다운로드 시 흔히 발생하는 HTML Table -> .xlsx 저장 케이스
+            return {
+                "status": "ext_mismatch",
+                "title": "⚠️ 웹 표(HTML) 형식의 엑셀 파일 (확장자 불일치)",
+                "detail": (
+                    f"'{p.name}' 파일은 확장자가 `.xlsx`이지만, 실제 내용은 그룹웨어/PMO 웹 시스템에서 내려받은 **HTML 표(`<table ...>`)** 데이터입니다!\n\n"
+                    f"• 원인: Excel에서 `.xlsx` 확장자는 반드시 ZIP(OOXML) 구조만 허용하므로, HTML 표가 들어있으면 '확장명이 잘못되었다'며 열기를 거부합니다.\n"
+                    f"• 해결: 아래 [🌐 내장 뷰어로 바로 보기] 또는 [🔧 .xls / .html로 사본 열어보기]를 클릭하세요!"
+                ),
+                "suggested_ext": ".xls",
+                "header_hex": header_hex,
+            }
+        if head[:4] != b"PK\x03\x04":
+            return {
+                "status": "corrupted",
+                "title": "⚠️ 표준 Excel(.xlsx) 헤더가 아닌 파일",
+                "detail": (
+                    f"'{p.name}' 파일이 표준 `.xlsx` (PK ZIP) 구조를 가지고 있지 않습니다.\n"
+                    f"• 파일 시작 바이트(HEX): {header_hex}\n\n"
+                    f"구글 드라이브 스트리밍 미완료, DRM 암호화, 또는 텍스트(CSV) 파일의 확장자만 `.xlsx`로 변경된 상태일 수 있습니다."
+                ),
+                "suggested_ext": "",
+                "header_hex": header_hex,
+            }
+
+    return {
+        "status": "ok",
+        "title": "정상",
+        "detail": "",
+        "suggested_ext": "",
+        "header_hex": header_hex,
+    }
+
+
+def read_text_file_smart(file_path: str, max_bytes: int = 262144) -> Tuple[str, str]:
+    """UTF-8, UTF-8-SIG, CP949, UTF-16 순으로 텍스트/HTML 파일을 안전하게 읽어 (내용, 인코딩)을 반환합니다."""
+    try:
+        raw = Path(file_path).read_bytes()[:max_bytes]
+    except Exception as exc:
+        return f"파일 읽기 오류: {exc}", "오류"
+    if not raw:
+        return "", "빈 파일 (0 B)"
+    for enc in ("utf-8-sig", "utf-8", "cp949", "euc-kr", "utf-16"):
+        try:
+            return raw.decode(enc), enc.upper()
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace"), "UTF-8 (일부 대체)"
+
+
+def parse_xlsx_preview_sheets(file_path: str, max_rows: int = 200) -> Tuple[List[Tuple[str, List[List[str]]]], str]:
+    """
+    외부 패키지 없이 Python 표준 `zipfile` + `xml.etree.ElementTree`만으로
+    `.xlsx` 엑셀 파일의 시트 목록과 셀 데이터를 추출합니다.
+    반환값: ([(시트명, 2차원 문자열 배열), ...], 오류메시지)
+    """
+    norm_p = safe_norm_path(file_path)
+    try:
+        with zipfile.ZipFile(norm_p, "r") as zf:
+            # 1) 공유 문자열(sharedStrings.xml) 파싱
+            shared_strings: List[str] = []
+            if "xl/sharedStrings.xml" in zf.namelist():
+                ss_xml = zf.read("xl/sharedStrings.xml")
+                ss_root = ET.fromstring(ss_xml)
+                for si in ss_root.iter():
+                    if si.tag.endswith("}si") or si.tag == "si":
+                        texts = [
+                            t.text or ""
+                            for t in si.iter()
+                            if (t.tag.endswith("}t") or t.tag == "t") and t.text
+                        ]
+                        shared_strings.append("".join(texts))
+
+            # 2) 시트 이름(workbook.xml) 파싱
+            sheet_names: List[str] = []
+            if "xl/workbook.xml" in zf.namelist():
+                wb_xml = zf.read("xl/workbook.xml")
+                wb_root = ET.fromstring(wb_xml)
+                for elem in wb_root.iter():
+                    if elem.tag.endswith("}sheet") or elem.tag == "sheet":
+                        s_name = elem.attrib.get("name", f"Sheet{len(sheet_names)+1}")
+                        sheet_names.append(s_name)
+
+            # 3) xl/worksheets/sheet*.xml 파싱
+            ws_files = sorted(
+                [n for n in zf.namelist() if n.startswith("xl/worksheets/sheet") and n.endswith(".xml")]
+            )
+            result_sheets: List[Tuple[str, List[List[str]]]] = []
+
+            def _col_letters_to_idx(cell_ref: str) -> int:
+                letters = "".join(ch for ch in cell_ref if ch.isalpha()).upper()
+                idx = 0
+                for ch in letters:
+                    idx = idx * 26 + (ord(ch) - ord("A") + 1)
+                return max(0, idx - 1)
+
+            for s_idx, ws_path in enumerate(ws_files):
+                title = sheet_names[s_idx] if s_idx < len(sheet_names) else f"Sheet{s_idx+1}"
+                ws_root = ET.fromstring(zf.read(ws_path))
+                rows_data: List[List[str]] = []
+                max_col_seen = 0
+
+                for row_elem in ws_root.iter():
+                    if not (row_elem.tag.endswith("}row") or row_elem.tag == "row"):
+                        continue
+                    if len(rows_data) >= max_rows:
+                        break
+                    row_dict: Dict[int, str] = {}
+                    for c_elem in row_elem:
+                        if not (c_elem.tag.endswith("}c") or c_elem.tag == "c"):
+                            continue
+                        ref = c_elem.attrib.get("r", "")
+                        col_i = _col_letters_to_idx(ref) if ref else len(row_dict)
+                        c_type = c_elem.attrib.get("t", "")
+                        val_str = ""
+                        for child in c_elem:
+                            if child.tag.endswith("}v") or child.tag == "v":
+                                raw_v = child.text or ""
+                                if c_type == "s":
+                                    try:
+                                        s_i = int(raw_v)
+                                        val_str = shared_strings[s_i] if 0 <= s_i < len(shared_strings) else raw_v
+                                    except Exception:
+                                        val_str = raw_v
+                                else:
+                                    val_str = raw_v
+                            elif child.tag.endswith("}is") or child.tag == "is":
+                                texts = [
+                                    t.text or ""
+                                    for t in child.iter()
+                                    if (t.tag.endswith("}t") or t.tag == "t") and t.text
+                                ]
+                                val_str = "".join(texts)
+                        row_dict[col_i] = val_str
+                        if col_i + 1 > max_col_seen:
+                            max_col_seen = min(50, col_i + 1)
+
+                    if row_dict:
+                        row_list = [row_dict.get(c, "") for c in range(max_col_seen)]
+                        rows_data.append(row_list)
+
+                # 열 개수 정규화
+                for r in rows_data:
+                    if len(r) < max_col_seen:
+                        r.extend([""] * (max_col_seen - len(r)))
+
+                result_sheets.append((title, rows_data))
+
+            return result_sheets, ""
+    except Exception as exc:
+        return [], str(exc)
+
+
+def safe_delete_path(target_path: str) -> Tuple[bool, str]:
+    """
+    로컬 드라이브 및 Google Drive(G:) 등 가상 드라이브의 파일/폴더를 다단계로 안전하게 삭제합니다.
+    """
+    norm_p = safe_norm_path(target_path)
+    if not os.path.exists(norm_p) and not os.path.islink(norm_p):
+        return True, ""
+
+    is_dir = os.path.isdir(norm_p) and not os.path.islink(norm_p)
+
+    if platform.system() == "Windows":
+        try:
+            ctypes.windll.kernel32.SetFileAttributesW(ctypes.c_wchar_p(norm_p), 0x80)
+        except Exception:
+            pass
+
+    last_exc: Optional[Exception] = None
+    try:
+        if is_dir:
+            def _onerror(func, path, exc_info):
+                if platform.system() == "Windows":
+                    try:
+                        ctypes.windll.kernel32.SetFileAttributesW(ctypes.c_wchar_p(path), 0x80)
+                    except Exception:
+                        pass
+                func(path)
+
+            shutil.rmtree(norm_p, onerror=_onerror)
+        else:
+            os.unlink(norm_p)
+        if not os.path.exists(norm_p):
+            return True, ""
+    except Exception as exc:
+        last_exc = exc
+
+    if platform.system() == "Windows":
+        try:
+            CREATE_NO_WINDOW = 0x08000000
+            cmd = ["cmd.exe", "/c", "rd", "/s", "/q", norm_p] if is_dir else ["cmd.exe", "/c", "del", "/f", "/q", norm_p]
+            subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                creationflags=CREATE_NO_WINDOW,
+                timeout=8,
+            )
+            if not os.path.exists(norm_p):
+                return True, ""
+        except Exception:
+            pass
+
+        try:
+            class SHFILEOPSTRUCTW(ctypes.Structure):
+                _fields_ = [
+                    ("hwnd", ctypes.c_void_p),
+                    ("wFunc", ctypes.c_uint),
+                    ("pFrom", ctypes.c_wchar_p),
+                    ("pTo", ctypes.c_wchar_p),
+                    ("fFlags", ctypes.c_ushort),
+                    ("fAnyOperationsAborted", ctypes.c_int),
+                    ("hNameMappings", ctypes.c_void_p),
+                    ("lpszProgressTitle", ctypes.c_wchar_p),
+                ]
+
+            op = SHFILEOPSTRUCTW()
+            op.hwnd = None
+            op.wFunc = 3  # FO_DELETE
+            op.pFrom = norm_p + "\0\0"
+            op.pTo = None
+            op.fFlags = 0x0010 | 0x0400 | 0x0004
+            res = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
+            if res == 0 and not os.path.exists(norm_p):
+                return True, ""
+        except Exception:
+            pass
+
+    win_err = getattr(last_exc, "winerror", None)
+    err_str = str(last_exc) if last_exc else "알 수 없는 삭제 거부 오류"
+    if win_err in (387, 380, 362, 4390) or "인터넷" in err_str or "클라우드" in err_str or "network" in err_str.lower():
+        return (
+            False,
+            f"{Path(norm_p).name}: Google Drive 데스크톱(G:) 클라우드 오프라인 보호 오류 (WinError {win_err})\n"
+            f"   → 원인: Google Drive 데스크톱 프로그램이 현재 오프라인/일시중지 상태여서 온라인 전용 파일 삭제를 차단했습니다.\n"
+            f"   → 해결: 우측 하단 트레이의 [Google Drive] 아이콘 상태를 확인하거나 구글 드라이브 웹에서 삭제해 주세요.",
+        )
+    return False, f"{Path(norm_p).name}: {err_str}"
+
+
+def copy_to_local_temp_cache(file_path: str, override_ext: Optional[str] = None) -> str:
+    """
+    가상 드라이브(G:)에서 직접 열 때 발생하는 파일 잠금/스트리밍 오류나 확장자 불일치를 우회하기 위해
+    로컬 `%TEMP%\\PyQuadDir_OpenCache` 폴더로 사본을 복사한 뒤 그 경로를 반환합니다.
+    """
+    norm_p = safe_norm_path(file_path)
+    p = Path(norm_p)
+    cache_dir = Path(tempfile.gettempdir()) / "PyQuadDir_OpenCache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    target_name = f"{p.stem}{override_ext}" if override_ext else p.name
+    dest_path = cache_dir / target_name
+    shutil.copy2(norm_p, dest_path)
+    return str(dest_path)
+
+
+def open_path_with_os(target_path: str, use_local_cache_for_virtual: bool = False) -> None:
+    """
+    파일이나 폴더를 OS 기본 프로그램으로 안전하게 실행합니다.
+    - 클라우드(G:) 파일 실행 전 사전 동기화(Pre-hydration)를 수행합니다.
+    - Windows에서는 ShellExecuteW에 상위 폴더를 Working Directory로 지정하여 실행합니다.
+    """
+    norm_p = safe_norm_path(target_path)
+
+    if os.path.isfile(norm_p):
+        if use_local_cache_for_virtual:
+            norm_p = copy_to_local_temp_cache(norm_p)
+        else:
+            # 클라우드 스트리밍 파일 전체/앞부분 사전 읽기(Hydration 유도)
+            try:
+                with open(norm_p, "rb") as f:
+                    f.read(65536)
+            except Exception:
+                pass
+
+    if platform.system() == "Windows":
+        work_dir = norm_p if os.path.isdir(norm_p) else os.path.dirname(norm_p)
+        try:
+            res = ctypes.windll.shell32.ShellExecuteW(
+                None, "open", norm_p, None, work_dir, 1  # SW_SHOWNORMAL = 1
+            )
+            if res > 32:
+                return
+        except Exception:
+            pass
+        os.startfile(norm_p)  # type: ignore[attr-defined]
+    elif platform.system() == "Darwin":
+        subprocess.Popen(["open", norm_p])
+    else:
+        subprocess.Popen(["xdg-open", norm_p])
+
+
+def load_app_config() -> Dict[str, object]:
+    for cfg_candidate in (CONFIG_PATH, LEGACY_CONFIG_PATH):
+        if cfg_candidate.exists():
+            try:
+                return json.loads(cfg_candidate.read_text(encoding="utf-8"))
             except Exception:
                 continue
     return {}
@@ -154,7 +695,6 @@ def save_app_config(data: Dict[str, object]) -> None:
 
 
 def get_default_favorites() -> List[Dict[str, str]]:
-    """Windows 및 OS 표준 주요 사용자 폴더를 기본 즐겨찾기로 구성합니다."""
     home = Path.home()
     candidates = [
         ("🏠 홈 폴더", home),
@@ -166,12 +706,11 @@ def get_default_favorites() -> List[Dict[str, str]]:
     favs: List[Dict[str, str]] = []
     for name, path in candidates:
         if path.exists() and path.is_dir():
-            favs.append({"name": name, "path": str(path)})
+            favs.append({"name": name, "path": safe_norm_path(str(path))})
     return favs
 
 
 def get_mounted_drives() -> List[Dict[str, object]]:
-    """현재 PC에 연결된 모든 드라이브(C:\\, D:\\ 등)와 용량 정보를 반환합니다."""
     drives: List[Dict[str, object]] = []
     if platform.system() == "Windows":
         try:
@@ -233,7 +772,6 @@ def _safe_disk_usage(path: str) -> Tuple[int, int]:
 
 
 def format_size(size_bytes: int) -> str:
-    """바이트 단위를 읽기 쉬운 단위로 변환합니다."""
     if size_bytes < 0:
         return ""
     if size_bytes < 1024:
@@ -262,7 +800,6 @@ def classify_size_bucket(size_b: int, is_dir: bool) -> str:
 
 
 def get_unique_target_path(dest_dir: Path, name: str) -> Path:
-    """동일한 이름이 있을 때 '파일명 (1).ext' 형태로 고유 경로를 생성합니다."""
     candidate = dest_dir / name
     if not candidate.exists():
         return candidate
@@ -284,7 +821,6 @@ def match_color_hex(
     is_dir: bool,
     ext: str,
 ) -> Optional[str]:
-    """파일 확장자 또는 폴더 여부에 따라 적용할 HEX 색상 코드를 반환합니다."""
     if not color_filter_enabled:
         return None
     color_key = "color_dark" if dark_mode else "color_light"
@@ -315,15 +851,6 @@ def get_initial_4_paths() -> List[str]:
         str(home / "Downloads") if (home / "Downloads").is_dir() else str(home),
         str(home / "Documents") if (home / "Documents").is_dir() else str(home),
     ]
-
-
-def open_path_with_os(target_path: str) -> None:
-    if platform.system() == "Windows":
-        os.startfile(target_path)  # type: ignore[attr-defined]
-    elif platform.system() == "Darwin":
-        subprocess.Popen(["open", target_path])
-    else:
-        subprocess.Popen(["xdg-open", target_path])
 
 
 # ---------------------------------------------------------------------------
@@ -389,10 +916,8 @@ def _check_or_install_pyqt6() -> bool:
 def run_pyqt6_app() -> None:
     binding = _detect_qt_binding()
     if binding == "PySide6":
-        from PySide6.QtCore import (  # type: ignore[import-not-found]
+        from PySide6.QtCore import (  # type: ignore
             QFileInfo,
-            QItemSelection,
-            QItemSelectionModel,
             QMimeData,
             QPoint,
             QPointF,
@@ -402,9 +927,7 @@ def run_pyqt6_app() -> None:
             QUrl,
             Signal as pyqtSignal,
         )
-        from PySide6.QtGui import (  # type: ignore[import-not-found]
-            QAction,
-            QActionGroup,
+        from PySide6.QtGui import (  # type: ignore
             QColor,
             QDrag,
             QFont,
@@ -412,13 +935,11 @@ def run_pyqt6_app() -> None:
             QImageReader,
             QKeySequence,
             QPainter,
-            QPainterPath,
             QPen,
             QPixmap,
-            QPolygonF,
             QShortcut,
         )
-        from PySide6.QtWidgets import (  # type: ignore[import-not-found]
+        from PySide6.QtWidgets import (  # type: ignore
             QAbstractItemView,
             QApplication,
             QCheckBox,
@@ -447,6 +968,7 @@ def run_pyqt6_app() -> None:
             QTableWidget,
             QTableWidgetItem,
             QTabWidget,
+            QTextBrowser,
             QToolBar,
             QToolButton,
             QVBoxLayout,
@@ -455,8 +977,6 @@ def run_pyqt6_app() -> None:
     else:
         from PyQt6.QtCore import (
             QFileInfo,
-            QItemSelection,
-            QItemSelectionModel,
             QMimeData,
             QPoint,
             QPointF,
@@ -467,8 +987,6 @@ def run_pyqt6_app() -> None:
             pyqtSignal,
         )
         from PyQt6.QtGui import (
-            QAction,
-            QActionGroup,
             QColor,
             QDrag,
             QFont,
@@ -476,10 +994,8 @@ def run_pyqt6_app() -> None:
             QImageReader,
             QKeySequence,
             QPainter,
-            QPainterPath,
             QPen,
             QPixmap,
-            QPolygonF,
             QShortcut,
         )
         from PyQt6.QtWidgets import (
@@ -511,6 +1027,7 @@ def run_pyqt6_app() -> None:
             QTableWidget,
             QTableWidgetItem,
             QTabWidget,
+            QTextBrowser,
             QToolBar,
             QToolButton,
             QVBoxLayout,
@@ -518,7 +1035,7 @@ def run_pyqt6_app() -> None:
         )
 
     # -----------------------------------------------------------------------
-    # 고시인성 벡터 UI 아이콘 생성기 (작아서 안 보이던 유니코드 기호를 선명한 그래픽으로 대체)
+    # 고시인성 벡터 UI 아이콘 생성기 (20x20px 선명한 그래픽)
     # -----------------------------------------------------------------------
     def create_ui_icon(kind: str, dark_mode: bool = True, size: int = 20) -> QIcon:
         pix = QPixmap(size, size)
@@ -534,7 +1051,6 @@ def run_pyqt6_app() -> None:
         accent_red = QColor("#F87171" if dark_mode else "#DC2626")
 
         if kind == "new":
-            # Windows 11 스타일: 파란 원 + 선명한 십자(+)
             pen = QPen(accent_blue, 1.8)
             p.setPen(pen)
             p.setBrush(QColor(37, 99, 235, 45))
@@ -546,7 +1062,6 @@ def run_pyqt6_app() -> None:
             p.drawLine(QPointF(5.5, mid), QPointF(size - 5.5, mid))
 
         elif kind == "sort":
-            # 상하 교차 화살표 (좌측 파란 상향 화살표, 우측 슬레이트 하향 화살표)
             pen_up = QPen(accent_blue, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
             p.setPen(pen_up)
             p.drawLine(QPointF(6.0, 16.0), QPointF(6.0, 4.0))
@@ -560,7 +1075,6 @@ def run_pyqt6_app() -> None:
             p.drawLine(QPointF(17.0, 12.5), QPointF(14.0, 16.0))
 
         elif kind == "view":
-            # 2x2 그리드 카드 아이콘
             pen = QPen(accent_blue, 1.8)
             p.setPen(pen)
             p.setBrush(QColor(56, 189, 248, 55))
@@ -572,7 +1086,6 @@ def run_pyqt6_app() -> None:
             p.drawRoundedRect(QRectF(11.0, 11.0, 6.5, 6.5), 1.5, 1.5)
 
         elif kind == "preview":
-            # Windows 11 미리보기 창 아이콘 (좌측 흰/투명, 우측 파란 강조 분할 사각형)
             p.setPen(QPen(fg_main, 1.8))
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawRoundedRect(QRectF(2.0, 3.5, 16.0, 13.0), 2.5, 2.5)
@@ -581,7 +1094,6 @@ def run_pyqt6_app() -> None:
             p.drawRoundedRect(QRectF(10.5, 3.5, 7.5, 13.0), 2.0, 2.0)
 
         elif kind == "details":
-            # Windows 11 세부정보 창 아이콘 (우측에 파란 줄무늬 표시)
             p.setPen(QPen(fg_main, 1.8))
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawRoundedRect(QRectF(2.0, 3.5, 16.0, 13.0), 2.5, 2.5)
@@ -591,7 +1103,6 @@ def run_pyqt6_app() -> None:
                 p.drawLine(QPointF(12.2, y_pos), QPointF(15.8, y_pos))
 
         elif kind == "layout":
-            # PyQuadDir 4분할 컬러 블록 아이콘
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(accent_blue)
             p.drawRoundedRect(QRectF(2.0, 2.0, 7.2, 7.2), 1.8, 1.8)
@@ -642,7 +1153,6 @@ def run_pyqt6_app() -> None:
         p.end()
         return QIcon(pix)
 
-    # 썸네일 아이콘 인메모리 캐시: (path, mtime_ns, size) -> QIcon
     THUMBNAIL_CACHE: Dict[Tuple[str, int, int], QIcon] = {}
 
     def get_entry_icon_or_thumbnail(
@@ -721,13 +1231,109 @@ def run_pyqt6_app() -> None:
                     return str(self.sort_key) < str(other.sort_key)
             return super().__lt__(other)
 
+    # -----------------------------------------------------------------------
+    # 내장 통합 뷰어 다이얼로그 (HTML 렌더링 + Excel .xlsx 시트 표 뷰어 + 텍스트/헤더 진단)
+    # -----------------------------------------------------------------------
+    class BuiltinFileViewerDialog(QDialog):
+        def __init__(self, file_path: str, parent: Optional[QWidget] = None):
+            super().__init__(parent)
+            self.file_path = safe_norm_path(file_path)
+            p = Path(self.file_path)
+            ext = p.suffix.lower()
+            try:
+                size_b = p.stat().st_size
+            except Exception:
+                size_b = 0
+
+            diag = diagnose_file_health(self.file_path)
+            self.setWindowTitle(f"🌐 Q-Dir 내장 만능 파일 뷰어 — {p.name} ({format_size(size_b)})")
+            self.resize(940, 660)
+
+            layout = QVBoxLayout(self)
+
+            info_bar = QHBoxLayout()
+            info_lbl = QLabel(
+                f"📍 경로: {self.file_path}   |   크기: {format_size(size_b)} ({size_b:,} B)   |   헤더: {diag.get('header_hex', '')}"
+            )
+            info_bar.addWidget(info_lbl, stretch=1)
+
+            btn_open_cache = QPushButton("⚡ 로컬 캐시(C:)로 복사 후 외부 실행")
+            btn_open_cache.setToolTip("가상 드라이브(G:) 오류를 우회하기 위해 C: 임시 폴더로 복사한 뒤 실행합니다")
+            btn_open_cache.clicked.connect(lambda: open_path_with_os(self.file_path, use_local_cache_for_virtual=True))
+            info_bar.addWidget(btn_open_cache)
+
+            btn_open_ext = QPushButton("🪟 기본 프로그램으로 열기")
+            btn_open_ext.clicked.connect(lambda: open_path_with_os(self.file_path))
+            info_bar.addWidget(btn_open_ext)
+            layout.addLayout(info_bar)
+
+            if diag["status"] != "ok":
+                warn_lbl = QLabel(f"🔎 [{diag['title']}]\n{diag['detail']}")
+                warn_lbl.setWordWrap(True)
+                warn_lbl.setStyleSheet(
+                    "background-color: #1E293B; color: #FBBF24; font-weight: bold; padding: 10px; border: 1px solid #FBBF24; border-radius: 6px;"
+                )
+                layout.addWidget(warn_lbl)
+
+            # 1) Excel (.xlsx / .xlsm) 내장 시트 표 뷰어
+            if ext in EXCEL_EXTENSIONS and diag["status"] == "ok":
+                sheets, err_str = parse_xlsx_preview_sheets(self.file_path, max_rows=300)
+                if sheets:
+                    sheet_tabs = QTabWidget()
+                    for s_name, rows_data in sheets:
+                        tbl = QTableWidget()
+                        r_cnt = len(rows_data)
+                        c_cnt = max((len(r) for r in rows_data), default=0)
+                        tbl.setRowCount(r_cnt)
+                        tbl.setColumnCount(c_cnt)
+                        for r_i, row_vals in enumerate(rows_data):
+                            for c_i, cell_val in enumerate(row_vals):
+                                tbl.setItem(r_i, c_i, QTableWidgetItem(str(cell_val)))
+                        tbl.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+                        tbl.setAlternatingRowColors(True)
+                        sheet_tabs.addTab(tbl, f"📊 {s_name} ({r_cnt}행)")
+                    layout.addWidget(sheet_tabs, stretch=1)
+                else:
+                    err_edit = QPlainTextEdit(f"엑셀 내부 구조 파싱 실패: {err_str}")
+                    err_edit.setReadOnly(True)
+                    layout.addWidget(err_edit, stretch=1)
+
+            # 2) HTML (또는 확장자는 .xlsx/.pdf이지만 실제 내용이 HTML인 경우)
+            elif ext in HTML_EXTENSIONS or diag.get("suggested_ext") == ".html" or "HTML" in str(diag.get("title", "")):
+                text_content, _ = read_text_file_smart(self.file_path, max_bytes=524288)
+                tabs = QTabWidget()
+                browser = QTextBrowser()
+                browser.setOpenExternalLinks(True)
+                browser.setSearchPaths([str(p.parent)])
+                browser.setHtml(text_content)
+                tabs.addTab(browser, "🌐 웹(HTML) 렌더링 화면")
+
+                raw_edit = QPlainTextEdit()
+                raw_edit.setReadOnly(True)
+                raw_edit.setPlainText(text_content)
+                tabs.addTab(raw_edit, "📝 원본 소스 코드")
+                layout.addWidget(tabs, stretch=1)
+
+            # 3) 일반 텍스트 / 마크다운 / 기타 파일 바이너리 프리뷰
+            else:
+                text_content, _ = read_text_file_smart(self.file_path, max_bytes=262144)
+                raw_edit = QPlainTextEdit()
+                raw_edit.setReadOnly(True)
+                raw_edit.setPlainText(text_content)
+                layout.addWidget(raw_edit, stretch=1)
+
+            close_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+            close_box.rejected.connect(self.reject)
+            layout.addWidget(close_box)
+
     def perform_file_transfer_qt(
         parent_widget: QWidget,
         src_paths: List[str],
         dest_dir_str: str,
         mode: str = "copy",
     ) -> Tuple[int, List[str]]:
-        dest_dir = Path(dest_dir_str)
+        dest_norm = safe_norm_path(dest_dir_str)
+        dest_dir = Path(dest_norm)
         if not dest_dir.exists() or not dest_dir.is_dir():
             return 0, [f"대상 폴더가 존재하지 않습니다: {dest_dir_str}"]
 
@@ -736,12 +1342,13 @@ def run_pyqt6_app() -> None:
         apply_all_choice: Optional[str] = None
 
         for src_str in src_paths:
-            src = Path(src_str)
+            src_norm = safe_norm_path(src_str)
+            src = Path(src_norm)
             if not src.exists():
                 continue
 
             try:
-                if src.is_dir() and dest_dir.resolve().is_relative_to(src.resolve()):
+                if src.is_dir() and os.path.commonpath([src_norm, dest_norm]).lower() == src_norm.lower():
                     errors.append(
                         f"폴더를 자기 자신의 하위 폴더로 {('이동' if mode == 'move' else '복사')}할 수 없습니다: {src.name}"
                     )
@@ -750,8 +1357,9 @@ def run_pyqt6_app() -> None:
                 pass
 
             target = dest_dir / src.name
+            target_norm = safe_norm_path(str(target))
 
-            if src.resolve() == target.resolve():
+            if src_norm.lower() == target_norm.lower():
                 if mode == "move":
                     continue
                 target = get_unique_target_path(dest_dir, f"{src.stem} - 복사본{src.suffix}")
@@ -787,13 +1395,9 @@ def run_pyqt6_app() -> None:
                 elif choice == "rename":
                     target = get_unique_target_path(dest_dir, src.name)
                 elif choice == "overwrite":
-                    try:
-                        if target.is_dir() and not target.is_symlink():
-                            shutil.rmtree(target)
-                        else:
-                            target.unlink()
-                    except Exception as exc:
-                        errors.append(f"{target.name} 덮어쓰기 실패: {exc}")
+                    ok_del, err_del = safe_delete_path(str(target))
+                    if not ok_del:
+                        errors.append(f"{target.name} 덮어쓰기 실패: {err_del}")
                         continue
 
             try:
@@ -851,11 +1455,12 @@ def run_pyqt6_app() -> None:
             self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
 
         def selectAll(self) -> None:
-            """Ctrl+A 전체 선택 시 '📁 .. (상위 폴더)'나 분류 헤더 행은 절대 선택되지 않도록 제외합니다."""
             self.clearSelection()
             sel_model = self.selectionModel()
             if sel_model is None:
                 return
+            from PyQt6.QtCore import QItemSelection, QItemSelectionModel
+
             selection = QItemSelection()
             max_col = self.columnCount() - 1
             for row in range(self.rowCount()):
@@ -864,8 +1469,7 @@ def run_pyqt6_app() -> None:
                 first_item = self.item(row, 0)
                 if first_item is None:
                     continue
-                is_parent_or_header = bool(first_item.data(Qt.ItemDataRole.UserRole + 1))
-                if is_parent_or_header:
+                if bool(first_item.data(Qt.ItemDataRole.UserRole + 1)):
                     continue
                 left_idx = self.model().index(row, 0)
                 right_idx = self.model().index(row, max_col)
@@ -890,7 +1494,6 @@ def run_pyqt6_app() -> None:
             super().keyPressEvent(event)
 
         def wheelEvent(self, event) -> None:
-            """Ctrl + 마우스 휠 스크롤 시 보기 모드 및 썸네일 크기를 전환합니다."""
             if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
                 self.paneFocused.emit()
                 delta = event.angleDelta().y()
@@ -965,7 +1568,7 @@ def run_pyqt6_app() -> None:
                 if url.isLocalFile():
                     local_p = url.toLocalFile()
                     if os.path.exists(local_p):
-                        src_paths.append(os.path.normpath(local_p))
+                        src_paths.append(safe_norm_path(local_p))
             if not src_paths:
                 return
 
@@ -1008,7 +1611,6 @@ def run_pyqt6_app() -> None:
             self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
 
         def selectAll(self) -> None:
-            """Ctrl+A 전체 선택 시 '📁 .. (상위 폴더)' 항목은 제외하고 선택합니다."""
             self.clearSelection()
             for i in range(self.count()):
                 item = self.item(i)
@@ -1036,7 +1638,6 @@ def run_pyqt6_app() -> None:
             super().keyPressEvent(event)
 
         def wheelEvent(self, event) -> None:
-            """Ctrl + 마우스 휠 스크롤 시 보기 모드 및 썸네일 크기를 전환합니다."""
             if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
                 self.paneFocused.emit()
                 delta = event.angleDelta().y()
@@ -1102,7 +1703,7 @@ def run_pyqt6_app() -> None:
                 if url.isLocalFile():
                     local_p = url.toLocalFile()
                     if os.path.exists(local_p):
-                        src_paths.append(os.path.normpath(local_p))
+                        src_paths.append(safe_norm_path(local_p))
             if not src_paths:
                 return
 
@@ -1119,7 +1720,7 @@ def run_pyqt6_app() -> None:
             self.filesDropped.emit(src_paths, target_dir, modifiers)
 
     # -----------------------------------------------------------------------
-    # 2. 개별 탭 위젯 (테이블 뷰 + 아이콘/썸네일 뷰 + Ctrl+휠 줌 전환)
+    # 2. 개별 탭 위젯 (스마트 파일 진단 & 로컬 캐시 우회 실행 탑재)
     # -----------------------------------------------------------------------
     class DirectoryTab(QWidget):
         pathChanged = pyqtSignal(str)
@@ -1145,7 +1746,7 @@ def run_pyqt6_app() -> None:
             self.current_path: str = ""
 
             self.view_mode: str = self.main_window.default_view_mode
-            self.extra_zoom_px: int = 148  # 아주 큰 아이콘 상태에서 추가 휠 확대 지원 (148 ~ 220px)
+            self.extra_zoom_px: int = 148
             self.sort_by: str = "name"
             self.sort_asc: bool = True
             self.group_by: str = "none"
@@ -1180,7 +1781,7 @@ def run_pyqt6_app() -> None:
             self.btn_refresh.clicked.connect(self.refresh)
 
             self.address_edit = QLineEdit()
-            self.address_edit.setPlaceholderText("경로 입력 후 Enter (예: C:\\Users)")
+            self.address_edit.setPlaceholderText("폴더 경로 또는 file:/// 주소 입력 후 Enter")
             self.address_edit.returnPressed.connect(self._on_address_entered)
 
             self.btn_star = QToolButton()
@@ -1245,26 +1846,45 @@ def run_pyqt6_app() -> None:
                 return self.icon_list.selected_file_paths()
             return self.table.selected_file_paths()
 
+        def select_specific_file(self, target_file_path: str) -> None:
+            norm_target = safe_norm_path(target_file_path).lower()
+            if self.stack.currentWidget() == self.icon_list:
+                self.icon_list.clearSelection()
+                for i in range(self.icon_list.count()):
+                    it = self.icon_list.item(i)
+                    if it is not None:
+                        p = it.data(Qt.ItemDataRole.UserRole)
+                        if p and safe_norm_path(str(p)).lower() == norm_target:
+                            it.setSelected(True)
+                            self.icon_list.setCurrentItem(it)
+                            self.icon_list.scrollToItem(it)
+                            break
+            else:
+                self.table.clearSelection()
+                for row in range(self.table.rowCount()):
+                    it = self.table.item(row, 0)
+                    if it is not None:
+                        p = it.data(Qt.ItemDataRole.UserRole)
+                        if p and safe_norm_path(str(p)).lower() == norm_target:
+                            self.table.selectRow(row)
+                            self.table.setCurrentCell(row, 0)
+                            self.table.scrollToItem(it)
+                            break
+
         def set_view_mode(self, mode: str) -> None:
             self.view_mode = mode
             if mode == "extra_large_icons" and self.extra_zoom_px < 148:
                 self.extra_zoom_px = 148
             self.refresh()
-            # 전환 후에도 현재 활성 뷰 위젯에 포커스를 유지해 연속 Ctrl+휠 및 키보드 조작 보장
             self.stack.currentWidget().setFocus()
 
         def step_view_mode_zoom(self, step: int) -> None:
-            """
-            Ctrl + 마우스 휠 스크롤로 보기 모드를 단계별로 확대(step > 0)하거나 축소(step < 0)합니다.
-            순서: 자세히 <-> 목록 <-> 내용 <-> 타일 <-> 작은 아이콘 <-> 보통 아이콘 <-> 큰 아이콘 <-> 아주 큰 아이콘(148~220px)
-            """
             curr_idx = (
                 ZOOM_WHEEL_ORDER.index(self.view_mode)
                 if self.view_mode in ZOOM_WHEEL_ORDER
                 else 0
             )
 
-            # 이미 '아주 큰 아이콘'인 상태에서 휠을 더 올리면 220px까지 썸네일을 한층 더 크게 확대
             if self.view_mode == "extra_large_icons" and step > 0:
                 if self.extra_zoom_px < 220:
                     self.extra_zoom_px = min(220, self.extra_zoom_px + 24)
@@ -1304,14 +1924,32 @@ def run_pyqt6_app() -> None:
             self.refresh()
 
         def navigate_to(self, path_str: str, record_history: bool = True) -> bool:
-            expanded = os.path.expandvars(os.path.expanduser(path_str.strip()))
-            target = Path(expanded)
-            if not target.exists() or not target.is_dir():
-                QMessageBox.warning(self, "경로 오류", f"폴더를 찾을 수 없거나 접근할 수 없습니다:\n{path_str}")
+            decoded_str = normalize_user_input_path(path_str)
+            if not decoded_str:
                 self.address_edit.setText(self.current_path)
                 return False
 
-            norm_path = str(target.resolve())
+            target = Path(decoded_str)
+
+            # 주소창에 파일 경로를 입력한 경우 상위 폴더로 이동 후 해당 파일을 선택 및 실행
+            if target.exists() and target.is_file():
+                parent_dir = safe_norm_path(str(target.parent))
+                file_norm = safe_norm_path(str(target))
+                if self.navigate_to(parent_dir, record_history=record_history):
+                    self.select_specific_file(file_norm)
+                    self._activate_path(file_norm)
+                    return True
+
+            if not target.exists() or not target.is_dir():
+                QMessageBox.warning(
+                    self,
+                    "경로 오류",
+                    f"폴더나 파일을 찾을 수 없거나 접근할 수 없습니다:\n{decoded_str}",
+                )
+                self.address_edit.setText(self.current_path)
+                return False
+
+            norm_path = safe_norm_path(str(target))
             self.current_path = norm_path
             self.address_edit.setText(norm_path)
 
@@ -1353,8 +1991,9 @@ def run_pyqt6_app() -> None:
             if not self.current_path:
                 return
             parent = Path(self.current_path).parent
-            if str(parent) != self.current_path:
-                self.navigate_to(str(parent), record_history=True)
+            parent_norm = safe_norm_path(str(parent))
+            if parent_norm != self.current_path:
+                self.navigate_to(parent_norm, record_history=True)
 
         def _collect_sorted_entries(self, p: Path) -> List[Dict[str, object]]:
             raw_entries: List[os.DirEntry] = []
@@ -1401,7 +2040,7 @@ def run_pyqt6_app() -> None:
                 records.append({
                     "name": entry.name,
                     "disp_name": disp_name,
-                    "path": entry.path,
+                    "path": safe_norm_path(entry.path),
                     "is_dir": is_dir,
                     "ext": ext,
                     "size_b": size_b,
@@ -1454,7 +2093,7 @@ def run_pyqt6_app() -> None:
             self._file_count = file_count
             self._total_bytes = total_bytes
 
-            has_parent = p.parent != p
+            has_parent = safe_norm_path(str(p.parent)) != self.current_path
 
             if self.view_mode in ("details", "content"):
                 self.stack.setCurrentWidget(self.table)
@@ -1504,7 +2143,7 @@ def run_pyqt6_app() -> None:
 
             row_idx = 0
             if has_parent:
-                parent_str = str(p.parent)
+                parent_str = safe_norm_path(str(p.parent))
                 item_name = SortableTableWidgetItem("📁 .. (상위 폴더)", "", is_dir=True, is_parent=True)
                 item_name.setData(Qt.ItemDataRole.UserRole, parent_str)
                 item_name.setData(Qt.ItemDataRole.UserRole + 1, True)
@@ -1622,7 +2261,7 @@ def run_pyqt6_app() -> None:
                 self.icon_list.setFlow(QListView.Flow.LeftToRight)
 
             if has_parent:
-                parent_str = str(p.parent)
+                parent_str = safe_norm_path(str(p.parent))
                 p_item = QListWidgetItem("📁 .. (상위 폴더)")
                 p_item.setData(Qt.ItemDataRole.UserRole, parent_str)
                 p_item.setData(Qt.ItemDataRole.UserRole + 1, True)
@@ -1734,7 +2373,6 @@ def run_pyqt6_app() -> None:
             self.statusUpdated.emit(f"[{self.pane.pane_title}] {self.current_path}  —  {msg}")
 
         def activate_selected_or_current(self) -> None:
-            """선택된 파일/폴더(또는 현재 포커스 행)에서 Enter 키를 눌렀을 때 폴더 진입 또는 파일 실행을 수행합니다."""
             self.paneActivated.emit()
             selected_paths = self.selected_file_paths()
             if selected_paths:
@@ -1786,13 +2424,75 @@ def run_pyqt6_app() -> None:
             self._activate_path(str(full_path))
 
         def _activate_path(self, full_path: str) -> None:
-            if os.path.isdir(full_path):
-                self.navigate_to(full_path, record_history=True)
-            else:
-                try:
-                    open_path_with_os(full_path)
-                except Exception as exc:
-                    QMessageBox.warning(self, "실행 오류", f"파일을 열 수 없습니다:\n{full_path}\n\n오류: {exc}")
+            norm_p = safe_norm_path(full_path)
+            if os.path.isdir(norm_p):
+                self.navigate_to(norm_p, record_history=True)
+                return
+
+            if not os.path.exists(norm_p):
+                QMessageBox.warning(self, "파일 없음", f"파일을 찾을 수 없습니다:\n{norm_p}")
+                return
+
+            # 파일 실행 전 매직 헤더 및 클라우드 스트리밍 상태 정밀 진단
+            diag = diagnose_file_health(norm_p)
+            status = str(diag.get("status", "ok"))
+            suggested_ext = str(diag.get("suggested_ext", ""))
+
+            if status != "ok":
+                msg_box = QMessageBox(self)
+                msg_box.setIcon(QMessageBox.Icon.Warning)
+                msg_box.setWindowTitle(str(diag.get("title", "파일 실행 진단 안내")))
+                msg_box.setText(str(diag.get("detail", "")))
+
+                btn_fix_ext = None
+                if suggested_ext:
+                    btn_fix_ext = msg_box.addButton(
+                        f"🔧 {suggested_ext} 확장자로 로컬 캐시 사본 만들어 바로 열기",
+                        QMessageBox.ButtonRole.AcceptRole,
+                    )
+                btn_viewer = msg_box.addButton(
+                    "🌐 Q-Dir 내장 뷰어로 내용 확인", QMessageBox.ButtonRole.ActionRole
+                )
+                btn_cache_open = msg_box.addButton(
+                    "⚡ 로컬 캐시(C:)로 복사 후 기본 프로그램 실행", QMessageBox.ButtonRole.ActionRole
+                )
+                btn_raw_open = msg_box.addButton(
+                    "🪟 그냥 원본 경로로 열기", QMessageBox.ButtonRole.ActionRole
+                )
+                msg_box.addButton("취소", QMessageBox.ButtonRole.RejectRole)
+                msg_box.exec()
+
+                clicked = msg_box.clickedButton()
+                if btn_fix_ext is not None and clicked == btn_fix_ext:
+                    try:
+                        cached_p = copy_to_local_temp_cache(norm_p, override_ext=suggested_ext)
+                        open_path_with_os(cached_p)
+                    except Exception as exc:
+                        QMessageBox.warning(self, "실행 오류", str(exc))
+                elif clicked == btn_viewer:
+                    self.open_builtin_viewer(norm_p)
+                elif clicked == btn_cache_open:
+                    try:
+                        open_path_with_os(norm_p, use_local_cache_for_virtual=True)
+                    except Exception as exc:
+                        QMessageBox.warning(self, "실행 오류", str(exc))
+                elif clicked == btn_raw_open:
+                    try:
+                        open_path_with_os(norm_p, use_local_cache_for_virtual=False)
+                    except Exception as exc:
+                        QMessageBox.warning(self, "실행 오류", str(exc))
+                return
+
+            # 정상 파일: 만약 C:/D:가 아닌 가상/네트워크 드라이브(예: G:\)에 있는 HTML/XLSX/PDF라면
+            # 원본 실행을 시도하되, 가상 드라이브 핸들 잠금 방지를 위해 안전하게 실행
+            try:
+                open_path_with_os(norm_p)
+            except Exception as exc:
+                QMessageBox.warning(self, "실행 오류", f"파일을 열 수 없습니다:\n{norm_p}\n\n오류: {exc}")
+
+        def open_builtin_viewer(self, file_path: str) -> None:
+            dlg = BuiltinFileViewerDialog(file_path, self)
+            dlg.exec()
 
         def _on_files_dropped(
             self, src_paths: List[str], target_dir: str, modifiers: Qt.KeyboardModifier
@@ -1846,7 +2546,13 @@ def run_pyqt6_app() -> None:
             elif len(selected_paths) == 1 and os.path.isfile(selected_paths[0]):
                 target_file = selected_paths[0]
                 act_run = menu.addAction("▶️ 기본 프로그램으로 실행 (Enter)")
-                act_run.triggered.connect(lambda: open_path_with_os(target_file))
+                act_run.triggered.connect(lambda: self._activate_path(target_file))
+                act_cache_run = menu.addAction("⚡ 로컬 캐시(C:)로 복사 후 열기 (가상 드라이브 오류 우회)")
+                act_cache_run.triggered.connect(
+                    lambda: open_path_with_os(target_file, use_local_cache_for_virtual=True)
+                )
+                act_builtin = menu.addAction("🌐 내장 만능 뷰어로 보기 (HTML / Excel 표 / 텍스트 / 헤더 진단)")
+                act_builtin.triggered.connect(lambda: self.open_builtin_viewer(target_file))
                 menu.addSeparator()
 
             view_sub = menu.addMenu("🖼️ 보기 모드 변경 (Ctrl+휠)")
@@ -1912,7 +2618,7 @@ def run_pyqt6_app() -> None:
             act_open_term.triggered.connect(self._open_terminal_here)
 
             if len(selected_paths) == 1:
-                act_prop = menu.addAction("ℹ️ 상세 속성 보기")
+                act_prop = menu.addAction("ℹ️ 상세 속성 및 파일 헤더 진단")
                 act_prop.triggered.connect(lambda: self._show_properties(selected_paths[0]))
 
             active_viewport = (
@@ -1977,7 +2683,7 @@ def run_pyqt6_app() -> None:
             paths = self.selected_file_paths()
             if len(paths) != 1:
                 return
-            src = Path(paths[0])
+            src = Path(safe_norm_path(paths[0]))
             new_name, ok = QInputDialog.getText(
                 self, "이름 바꾸기", "새 이름을 입력하세요:", text=src.name
             )
@@ -2012,18 +2718,23 @@ def run_pyqt6_app() -> None:
 
             errors: List[str] = []
             for p_str in paths:
-                p = Path(p_str)
-                try:
-                    if p.is_dir() and not p.is_symlink():
-                        shutil.rmtree(p)
-                    else:
-                        p.unlink()
-                except Exception as exc:
-                    errors.append(f"{p.name}: {exc}")
+                ok_del, err_msg = safe_delete_path(p_str)
+                if not ok_del and err_msg:
+                    errors.append(err_msg)
 
             self.main_window.refresh_all_panes()
             if errors:
-                QMessageBox.warning(self, "삭제 중 오류", "\n".join(errors[:10]))
+                msg_box = QMessageBox(self)
+                msg_box.setIcon(QMessageBox.Icon.Warning)
+                msg_box.setWindowTitle("삭제 중 클라우드/파일 시스템 안내")
+                msg_box.setText("\n\n".join(errors[:6]))
+                btn_open_exp = msg_box.addButton(
+                    "🪟 Windows 탐색기에서 이 폴더 열기", QMessageBox.ButtonRole.ActionRole
+                )
+                msg_box.addButton("확인", QMessageBox.ButtonRole.AcceptRole)
+                msg_box.exec()
+                if msg_box.clickedButton() == btn_open_exp:
+                    open_path_with_os(self.current_path)
 
         def _open_terminal_here(self) -> None:
             try:
@@ -2037,28 +2748,41 @@ def run_pyqt6_app() -> None:
                 QMessageBox.warning(self, "터미널 실행 실패", f"터미널을 열 수 없습니다:\n{exc}")
 
         def _show_properties(self, target_path: str) -> None:
-            p = Path(target_path)
+            norm_p = safe_norm_path(target_path)
+            p = Path(norm_p)
             try:
                 st = p.stat()
                 created = datetime.datetime.fromtimestamp(st.st_ctime).strftime("%Y-%m-%d %H:%M:%S")
                 modified = datetime.datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-                size_info = format_size(st.st_size) if p.is_file() else "폴더 (Directory)"
+                size_info = f"{format_size(st.st_size)} ({st.st_size:,} 바이트)" if p.is_file() else "폴더 (Directory)"
             except Exception as exc:
-                QMessageBox.information(self, "속성", f"경로: {target_path}\n상태 조회 오류: {exc}")
+                QMessageBox.information(self, "속성", f"경로: {norm_p}\n상태 조회 오류: {exc}")
                 return
+
+            diag_str = ""
+            if p.is_file():
+                diag = diagnose_file_health(norm_p)
+                diag_str = (
+                    f"\n[파일 바이너리 헤더 진단]\n"
+                    f"• 첫 16바이트(HEX): {diag.get('header_hex', '')}\n"
+                    f"• 상태 판정: {diag.get('title', '정상')}\n"
+                )
+                if diag.get("detail"):
+                    diag_str += f"• 상세 설명:\n{diag.get('detail')}\n"
 
             info_text = (
                 f"이름: {p.name}\n"
-                f"전체 경로: {p.resolve()}\n"
+                f"전체 경로: {norm_p}\n"
                 f"유형: {'폴더' if p.is_dir() else (p.suffix or '파일')}\n"
                 f"크기: {size_info}\n"
                 f"생성 일시: {created}\n"
                 f"수정 일시: {modified}"
+                f"{diag_str}"
             )
-            QMessageBox.information(self, f"'{p.name}' 속성", info_text)
+            QMessageBox.information(self, f"'{p.name}' 상세 속성 및 헤더 진단", info_text)
 
     # -----------------------------------------------------------------------
-    # 3. 우측 미리 보기 창 (Preview Pane) & 세부 정보 창 (Details Pane)
+    # 3. 우측 미리 보기 창 (HTML + Excel .xlsx 시트 프리뷰 + 헤더 진단 지원)
     # -----------------------------------------------------------------------
     class InspectorPane(QFrame):
         def __init__(self, main_window: "QDirMainWindow", parent: Optional[QWidget] = None):
@@ -2067,8 +2791,8 @@ def run_pyqt6_app() -> None:
             self.setObjectName("InspectorPane")
             self.mode: str = "preview"
             self.current_target_path: str = ""
-            self.setMinimumWidth(260)
-            self.setMaximumWidth(460)
+            self.setMinimumWidth(290)
+            self.setMaximumWidth(500)
             self._build_ui()
 
         def _build_ui(self) -> None:
@@ -2094,6 +2818,17 @@ def run_pyqt6_app() -> None:
             self.img_label.setWordWrap(True)
             layout.addWidget(self.img_label)
 
+            self.html_browser = QTextBrowser()
+            self.html_browser.setOpenExternalLinks(True)
+            self.html_browser.hide()
+            layout.addWidget(self.html_browser, stretch=1)
+
+            self.excel_table = QTableWidget()
+            self.excel_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            self.excel_table.setAlternatingRowColors(True)
+            self.excel_table.hide()
+            layout.addWidget(self.excel_table, stretch=1)
+
             self.text_preview = QPlainTextEdit()
             self.text_preview.setReadOnly(True)
             self.text_preview.hide()
@@ -2111,15 +2846,19 @@ def run_pyqt6_app() -> None:
 
         def inspect_path(self, path_str: str) -> None:
             self.current_target_path = path_str
+            self.html_browser.hide()
+            self.excel_table.hide()
+            self.text_preview.hide()
+
             if not path_str or not os.path.exists(path_str):
                 self.img_label.show()
                 self.img_label.setPixmap(QPixmap())
                 self.img_label.setText("항목을 선택해 미리 보거나\n세부 정보를 확인하세요.")
-                self.text_preview.hide()
                 self.meta_label.setText("")
                 return
 
-            p = Path(path_str)
+            norm_p = safe_norm_path(path_str)
+            p = Path(norm_p)
             is_dir = p.is_dir()
             ext = "" if is_dir else p.suffix.lower()
 
@@ -2135,9 +2874,8 @@ def run_pyqt6_app() -> None:
 
             img_dims = ""
             if not is_dir and ext in IMAGE_EXTENSIONS:
-                self.text_preview.hide()
                 self.img_label.show()
-                reader = QImageReader(str(p))
+                reader = QImageReader(norm_p)
                 reader.setAutoTransform(True)
                 orig_sz = reader.size()
                 if orig_sz.isValid():
@@ -2154,22 +2892,59 @@ def run_pyqt6_app() -> None:
                     self.img_label.setPixmap(QPixmap())
                     self.img_label.setText("🖼️ 이미지를 불러올 수 없습니다.")
 
+            elif self.mode == "preview" and not is_dir and ext in EXCEL_EXTENSIONS:
+                diag = diagnose_file_health(norm_p)
+                if diag["status"] == "ok":
+                    sheets, _ = parse_xlsx_preview_sheets(norm_p, max_rows=80)
+                    if sheets and sheets[0][1]:
+                        self.img_label.hide()
+                        self.excel_table.show()
+                        rows_data = sheets[0][1]
+                        r_cnt = len(rows_data)
+                        c_cnt = max((len(r) for r in rows_data), default=0)
+                        self.excel_table.setRowCount(r_cnt)
+                        self.excel_table.setColumnCount(c_cnt)
+                        for r_i, row_vals in enumerate(rows_data):
+                            for c_i, cell_val in enumerate(row_vals):
+                                self.excel_table.setItem(r_i, c_i, QTableWidgetItem(str(cell_val)))
+                    else:
+                        self.img_label.hide()
+                        self.text_preview.show()
+                        self.text_preview.setPlainText("📊 표시할 엑셀 시트 데이터가 없습니다.")
+                else:
+                    self.img_label.hide()
+                    self.text_preview.show()
+                    self.text_preview.setPlainText(f"{diag['title']}\n\n{diag['detail']}")
+
+            elif self.mode == "preview" and not is_dir and ext in HTML_EXTENSIONS:
+                self.img_label.hide()
+                self.html_browser.show()
+                try:
+                    content, _ = read_text_file_smart(norm_p, max_bytes=131072)
+                    self.html_browser.setSearchPaths([str(p.parent)])
+                    if content.strip():
+                        self.html_browser.setHtml(content)
+                    else:
+                        diag = diagnose_file_health(norm_p)
+                        self.html_browser.setPlainText(f"{diag['title']}\n\n{diag['detail']}")
+                except Exception as exc:
+                    self.html_browser.setPlainText(f"HTML 미리 보기 실패: {exc}")
+
             elif self.mode == "preview" and not is_dir and ext in TEXT_PREVIEW_EXTENSIONS:
                 self.img_label.hide()
                 self.text_preview.show()
                 try:
-                    raw_bytes = p.read_bytes()[:32768]
-                    try:
-                        content = raw_bytes.decode("utf-8")
-                    except UnicodeDecodeError:
-                        content = raw_bytes.decode("cp949", errors="replace")
-                    self.text_preview.setPlainText(content)
+                    content, _ = read_text_file_smart(norm_p, max_bytes=65536)
+                    if content:
+                        self.text_preview.setPlainText(content)
+                    else:
+                        diag = diagnose_file_health(norm_p)
+                        self.text_preview.setPlainText(f"{diag['title']}\n\n{diag['detail']}")
                 except Exception as exc:
                     self.text_preview.setPlainText(f"텍스트 미리 보기 실패: {exc}")
             else:
-                self.text_preview.hide()
                 self.img_label.show()
-                ic = QFileIconProvider().icon(QFileInfo(str(p)))
+                ic = QFileIconProvider().icon(QFileInfo(norm_p))
                 self.img_label.setPixmap(ic.pixmap(QSize(72, 72)))
 
             if self.mode == "details":
@@ -2180,6 +2955,8 @@ def run_pyqt6_app() -> None:
                 ]
                 if not is_dir:
                     lines.append(f"📦 크기: {format_size(size_b)} ({size_b:,} 바이트)")
+                    diag = diagnose_file_health(norm_p)
+                    lines.append(f"🔎 헤더 진단: {diag.get('title', '정상')} ({diag.get('header_hex', '')})")
                 if img_dims:
                     lines.append(f"🖼️ 해상도: {img_dims}")
                 lines.extend([
@@ -2495,16 +3272,17 @@ def run_pyqt6_app() -> None:
             path_str, ok1 = QInputDialog.getText(self, "즐겨찾기 추가", "폴더 전체 경로를 입력하세요:")
             if not (ok1 and path_str.strip()):
                 return
-            p = Path(path_str.strip())
+            norm_p = normalize_user_input_path(path_str)
+            p = Path(norm_p)
             if not p.is_dir():
                 QMessageBox.warning(self, "경로 오류", "유효한 폴더 경로가 아닙니다.")
                 return
-            default_name = f"⭐ {p.name or str(p)}"
+            default_name = f"⭐ {p.name or norm_p}"
             name_str, ok2 = QInputDialog.getText(
                 self, "즐겨찾기 이름", "표시할 이름을 입력하세요:", text=default_name
             )
             if ok2 and name_str.strip():
-                self.favorites.append({"name": name_str.strip(), "path": str(p.resolve())})
+                self.favorites.append({"name": name_str.strip(), "path": safe_norm_path(norm_p)})
                 self._refresh_list()
 
         def _rename_item(self) -> None:
@@ -2534,12 +3312,12 @@ def run_pyqt6_app() -> None:
                 self.list_widget.setCurrentRow(new_idx)
 
     # -----------------------------------------------------------------------
-    # 6. 메인 Q-Dir 윈도우 (고시인성 벡터 아이콘 명령 바 + 즐겨찾기 바)
+    # 6. 메인 Q-Dir 윈도우
     # -----------------------------------------------------------------------
     class QDirMainWindow(QMainWindow):
         def __init__(self):
             super().__init__()
-            self.setWindowTitle("PyQuadDir Desktop Explorer — 4분할 다중 탭 파일 탐색기")
+            self.setWindowTitle("PyQuadDir Desktop Explorer v2.4 — 4분할 다중 탭 파일 탐색기")
             self.resize(1520, 940)
 
             self.config = load_app_config()
@@ -2587,15 +3365,11 @@ def run_pyqt6_app() -> None:
             super().closeEvent(event)
 
         def _build_ui(self) -> None:
-            # ===============================================================
-            # 1층: Windows 11 탐색기 스타일 통합 명령 바 (20x20 선명한 벡터 아이콘 적용)
-            # ===============================================================
             cmd_tb = QToolBar("탐색기 명령 바")
             cmd_tb.setMovable(False)
             cmd_tb.setIconSize(QSize(20, 20))
             self.addToolBar(Qt.ToolBarArea.TopToolBarArea, cmd_tb)
 
-            # (1) [새로 만들기 ▾]
             self.btn_new = QToolButton()
             self.btn_new.setText("새로 만들기 ▼")
             self.btn_new.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -2609,6 +3383,9 @@ def run_pyqt6_app() -> None:
             menu_new.addAction("📘 마크다운 문서 (.md)").triggered.connect(
                 lambda: self._create_file_in_active("노트.md")
             )
+            menu_new.addAction("🌐 웹 HTML 문서 (.html)").triggered.connect(
+                lambda: self._create_file_in_active("index.html")
+            )
             menu_new.addAction("🐍 Python 스크립트 (.py)").triggered.connect(
                 lambda: self._create_file_in_active("script.py")
             )
@@ -2620,7 +3397,6 @@ def run_pyqt6_app() -> None:
 
             cmd_tb.addSeparator()
 
-            # (2) 파일 편집 버튼들
             act_cut = QToolButton()
             act_cut.setText("✂️ 잘라내기")
             act_cut.setToolTip("선택 항목 잘라내기 (Ctrl+X)")
@@ -2663,7 +3439,6 @@ def run_pyqt6_app() -> None:
 
             cmd_tb.addSeparator()
 
-            # (3) [정렬 ▾] (선명한 상하 화살표 벡터 아이콘)
             self.btn_sort = QToolButton()
             self.btn_sort.setText("정렬 ▼")
             self.btn_sort.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -2674,7 +3449,6 @@ def run_pyqt6_app() -> None:
             self.btn_sort.setMenu(self.sort_menu)
             cmd_tb.addWidget(self.btn_sort)
 
-            # (4) [보기 ▾] (선명한 2x2 그리드 벡터 아이콘)
             self.btn_view = QToolButton()
             self.btn_view.setText("보기 ▼")
             self.btn_view.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -2687,7 +3461,6 @@ def run_pyqt6_app() -> None:
 
             cmd_tb.addSeparator()
 
-            # (5) [레이아웃 ▾] (4분할 컬러 로고 아이콘)
             self.btn_layout_menu = QToolButton()
             self.btn_layout_menu.setText("레이아웃: 4분할 ▼")
             self.btn_layout_menu.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -2698,10 +3471,9 @@ def run_pyqt6_app() -> None:
             self.btn_layout_menu.setMenu(self.layout_menu)
             cmd_tb.addWidget(self.btn_layout_menu)
 
-            # (6) [💽 드라이브 ▾]
             self.btn_drive_menu = QToolButton()
             self.btn_drive_menu.setText("💽 드라이브 ▼")
-            self.btn_drive_menu.setToolTip("연결된 모든 드라이브(C:, D: 등) 목록과 남은 용량을 보고 이동합니다")
+            self.btn_drive_menu.setToolTip("연결된 모든 드라이브(C:, D:, G: 등) 목록과 남은 용량을 보고 이동합니다")
             self.btn_drive_menu.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
             self.drive_menu = QMenu(self.btn_drive_menu)
             self.drive_menu.aboutToShow.connect(self._populate_drive_menu)
@@ -2710,11 +3482,10 @@ def run_pyqt6_app() -> None:
 
             cmd_tb.addSeparator()
 
-            # (7) 우측: [미리 보기] & [세부 정보] (선명한 분할 창 벡터 아이콘) & [테마]
             self.btn_preview_toggle = QToolButton()
             self.btn_preview_toggle.setText("미리 보기")
             self.btn_preview_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-            self.btn_preview_toggle.setToolTip("우측 미리 보기 창 켜기/끄기 (이미지 및 문서 내용 실시간 미리보기)")
+            self.btn_preview_toggle.setToolTip("우측 미리 보기 창 켜기/끄기 (이미지·HTML·Excel 표·문서 실시간 미리보기)")
             self.btn_preview_toggle.setCheckable(True)
             self.btn_preview_toggle.clicked.connect(lambda checked: self.toggle_inspector_pane("preview", checked))
             cmd_tb.addWidget(self.btn_preview_toggle)
@@ -2722,7 +3493,7 @@ def run_pyqt6_app() -> None:
             self.btn_details_toggle = QToolButton()
             self.btn_details_toggle.setText("세부 정보")
             self.btn_details_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-            self.btn_details_toggle.setToolTip("우측 세부 정보 창 켜기/끄기 (파일 상세 메타데이터 및 해상도 표시)")
+            self.btn_details_toggle.setToolTip("우측 세부 정보 창 켜기/끄기 (파일 상세 메타데이터 및 바이너리 헤더 진단)")
             self.btn_details_toggle.setCheckable(True)
             self.btn_details_toggle.clicked.connect(lambda checked: self.toggle_inspector_pane("details", checked))
             cmd_tb.addWidget(self.btn_details_toggle)
@@ -2733,18 +3504,12 @@ def run_pyqt6_app() -> None:
             self.btn_theme.clicked.connect(self._toggle_theme)
             cmd_tb.addWidget(self.btn_theme)
 
-            # ===============================================================
-            # 2층: 즐겨찾기(⭐) 전용 바 — 가로 전체 폭을 즐겨찾기에 온전히 할당!
-            # ===============================================================
             self.addToolBarBreak(Qt.ToolBarArea.TopToolBarArea)
             self.fav_tb = QToolBar("즐겨찾기 전용 바")
             self.fav_tb.setMovable(False)
             self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.fav_tb)
             self._rebuild_favorites_bar()
 
-            # ===============================================================
-            # 중앙 영역: 좌측 4분할 스플리터 + 우측 미리보기/세부정보 사이드 창
-            # ===============================================================
             central = QWidget()
             central_layout = QHBoxLayout(central)
             central_layout.setContentsMargins(6, 6, 6, 6)
@@ -2769,7 +3534,7 @@ def run_pyqt6_app() -> None:
                 if isinstance(saved_pane_tabs, list) and i < len(saved_pane_tabs):
                     candidate_list = saved_pane_tabs[i]
                     if isinstance(candidate_list, list):
-                        init_tabs = [str(p) for p in candidate_list if os.path.isdir(str(p))]
+                        init_tabs = [safe_norm_path(str(p)) for p in candidate_list if os.path.isdir(str(p))]
                 if not init_tabs:
                     init_tabs = [default_starts[i]]
 
@@ -2779,7 +3544,7 @@ def run_pyqt6_app() -> None:
 
             self.setStatusBar(QStatusBar())
             self.statusBar().showMessage(
-                "준비 완료 — 패널 위에서 [Ctrl + 마우스 휠]을 굴리면 보기 모드(자세히 ↔ 썸네일 아이콘)가 즉시 전환됩니다."
+                "준비 완료 — 파일이 안 열릴 때 더블클릭하거나 우클릭 → [🌐 내장 만능 뷰어로 보기]를 누르면 원인을 진단하고 바로 열람합니다."
             )
             self._register_shortcuts()
 
@@ -2793,9 +3558,6 @@ def run_pyqt6_app() -> None:
             self.btn_preview_toggle.setIcon(create_ui_icon("preview", dm, 20))
             self.btn_details_toggle.setIcon(create_ui_icon("details", dm, 20))
 
-        # -------------------------------------------------------------------
-        # 상단 드롭다운 메뉴 동적 생성기
-        # -------------------------------------------------------------------
         def _populate_send_menu(self) -> None:
             self.send_menu.clear()
             t = self.active_pane().current_tab()
@@ -2951,9 +3713,6 @@ def run_pyqt6_app() -> None:
                 act_nt = new_tab_sub.addAction(f"💾 {root} ({label})")
                 act_nt.triggered.connect(lambda checked=False, r=root: self.active_pane().add_new_tab(r))
 
-        # -------------------------------------------------------------------
-        # 즐겨찾기 바 (가로 1줄 전체 활용)
-        # -------------------------------------------------------------------
         def _rebuild_favorites_bar(self) -> None:
             self.fav_tb.clear()
 
@@ -3006,9 +3765,6 @@ def run_pyqt6_app() -> None:
                 self._rebuild_favorites_bar()
                 self.save_config()
 
-        # -------------------------------------------------------------------
-        # 미리 보기 창 / 세부 정보 창 제어
-        # -------------------------------------------------------------------
         def toggle_inspector_pane(self, mode: str, show: bool) -> None:
             if show:
                 self.inspector_pane.set_mode(mode)
@@ -3031,9 +3787,6 @@ def run_pyqt6_app() -> None:
                 target = first_selected_path or self.active_pane().current_path()
                 self.inspector_pane.inspect_path(target)
 
-        # -------------------------------------------------------------------
-        # 보기 / 정렬 / 표시 옵션 핸들러
-        # -------------------------------------------------------------------
         def _set_active_sort(
             self, sort_by: Optional[str] = None, ascending: Optional[bool] = None
         ) -> None:
@@ -3087,9 +3840,6 @@ def run_pyqt6_app() -> None:
             if t:
                 t.create_new_text_file(default_name)
 
-        # -------------------------------------------------------------------
-        # 레이아웃 및 기본 동작
-        # -------------------------------------------------------------------
         def _register_shortcuts(self) -> None:
             QShortcut(QKeySequence("Ctrl+1"), self, activated=lambda: self.set_layout_mode("quad"))
             QShortcut(QKeySequence("Ctrl+2"), self, activated=lambda: self.set_layout_mode("2h"))
@@ -3214,7 +3964,7 @@ def run_pyqt6_app() -> None:
                 self.bottom_splitter.setSizes([500, 500])
 
         def add_favorite(self, path_str: str) -> None:
-            norm = str(Path(path_str).resolve())
+            norm = safe_norm_path(path_str)
             for fav in self.favorites:
                 if fav.get("path") == norm:
                     QMessageBox.information(self, "즐겨찾기", "이미 즐겨찾기에 등록된 폴더입니다.")
@@ -3346,7 +4096,7 @@ def run_pyqt6_app() -> None:
                 QFrame#ExplorerPane[activePane="true"] { border: 2px solid #38BDF8; }
                 QLabel#PaneBadge { background-color: #2563EB; color: #FFFFFF; font-weight: bold; border-radius: 4px; padding: 1px 5px; }
                 QLabel#PaneTitlePath, QLabel#PaneSummaryLabel { color: #94A3B8; font-size: 11px; padding: 2px 4px; }
-                QLineEdit, QPlainTextEdit { background-color: #0F172A; color: #F8FAFC; border: 1px solid #475569; border-radius: 4px; padding: 4px 6px; selection-background-color: #2563EB; font-size: 12px; }
+                QLineEdit, QPlainTextEdit, QTextBrowser { background-color: #0F172A; color: #F8FAFC; border: 1px solid #475569; border-radius: 4px; padding: 4px 6px; selection-background-color: #2563EB; font-size: 12px; }
                 QLineEdit:focus { border: 1px solid #38BDF8; }
                 QTabWidget::pane { border: 1px solid #334155; background-color: #0F172A; }
                 QTabBar::tab { background-color: #1E293B; color: #94A3B8; border: 1px solid #334155; border-bottom: none; border-top-left-radius: 5px; border-top-right-radius: 5px; padding: 5px 10px; margin-right: 2px; font-size: 12px; }
@@ -3372,7 +4122,7 @@ def run_pyqt6_app() -> None:
                 QFrame#ExplorerPane[activePane="true"] { border: 2px solid #2563EB; }
                 QLabel#PaneBadge { background-color: #2563EB; color: #FFFFFF; font-weight: bold; border-radius: 4px; padding: 1px 5px; }
                 QLabel#PaneTitlePath, QLabel#PaneSummaryLabel { color: #475569; font-size: 11px; padding: 2px 4px; }
-                QLineEdit, QPlainTextEdit { background-color: #F8FAFC; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
+                QLineEdit, QPlainTextEdit, QTextBrowser { background-color: #F8FAFC; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
                 QLineEdit:focus { border: 1px solid #2563EB; }
                 QTabWidget::pane { border: 1px solid #CBD5E1; background-color: #FFFFFF; }
                 QTabBar::tab { background-color: #E2E8F0; color: #475569; border: 1px solid #CBD5E1; border-bottom: none; border-top-left-radius: 5px; border-top-right-radius: 5px; padding: 5px 10px; margin-right: 2px; font-size: 12px; }
@@ -3399,7 +4149,7 @@ def run_pyqt6_app() -> None:
 
 
 # ===========================================================================
-# 2. 내장 Tkinter (ttk) 폴백 엔진 (Ctrl+마우스 휠 행 높이 확대/축소 지원)
+# 2. 내장 Tkinter (ttk) 폴백 엔진 (Google Drive G: 및 file:/// 호환)
 # ===========================================================================
 def run_tkinter_app() -> None:
     import tkinter as tk
@@ -3410,7 +4160,7 @@ def run_tkinter_app() -> None:
             super().__init__(parent_notebook)
             self.app = app
             self.pane_idx = pane_idx
-            self.current_path = str(Path(initial_path).resolve()) if os.path.isdir(initial_path) else str(Path.home())
+            self.current_path = safe_norm_path(initial_path) if os.path.isdir(initial_path) else str(Path.home())
             self.history: List[str] = [self.current_path]
             self.history_idx: int = 0
 
@@ -3491,12 +4241,23 @@ def run_tkinter_app() -> None:
                 self.tree.selection_set(sel)
 
         def navigate_to(self, path_str: str, record: bool = True) -> None:
-            p = Path(os.path.expandvars(os.path.expanduser(path_str.strip())))
+            decoded_str = normalize_user_input_path(path_str)
+            p = Path(decoded_str)
+            if p.exists() and p.is_file():
+                parent_norm = safe_norm_path(str(p.parent))
+                self.navigate_to(parent_norm, record=record)
+                file_norm = safe_norm_path(str(p))
+                if file_norm in self.tree.get_children():
+                    self.tree.selection_set([file_norm])
+                    self.tree.see(file_norm)
+                self._activate_file(file_norm)
+                return
+
             if not p.is_dir():
-                messagebox.showwarning("경로 오류", f"폴더를 찾을 수 없습니다:\n{path_str}")
+                messagebox.showwarning("경로 오류", f"폴더를 찾을 수 없습니다:\n{decoded_str}")
                 self.addr_var.set(self.current_path)
                 return
-            self.current_path = str(p.resolve())
+            self.current_path = safe_norm_path(str(p))
             self.addr_var.set(self.current_path)
             if record:
                 self.history = self.history[: self.history_idx + 1]
@@ -3504,6 +4265,13 @@ def run_tkinter_app() -> None:
                 self.history_idx = len(self.history) - 1
             self.refresh()
             self.app.update_tab_title(self.pane_idx, self)
+
+        def _activate_file(self, file_path: str) -> None:
+            diag = diagnose_file_health(file_path)
+            if diag["status"] != "ok":
+                messagebox.showwarning(str(diag["title"]), str(diag["detail"]))
+                return
+            open_path_with_os(file_path)
 
         def go_back(self) -> None:
             if self.history_idx > 0:
@@ -3517,8 +4285,9 @@ def run_tkinter_app() -> None:
 
         def go_up(self) -> None:
             p = Path(self.current_path)
-            if p.parent != p:
-                self.navigate_to(str(p.parent))
+            parent_norm = safe_norm_path(str(p.parent))
+            if parent_norm != self.current_path:
+                self.navigate_to(parent_norm)
 
         def refresh(self) -> None:
             for item in self.tree.get_children():
@@ -3527,7 +4296,7 @@ def run_tkinter_app() -> None:
             p = Path(self.current_path)
             kw = self.filter_var.get().strip().lower()
 
-            if p.parent != p:
+            if safe_norm_path(str(p.parent)) != self.current_path:
                 self.tree.insert("", tk.END, iid="..parent..", values=("📁 .. (상위 폴더)", "", "상위 폴더", ""), tags=("parent",))
 
             entries: List[os.DirEntry] = []
@@ -3576,10 +4345,11 @@ def run_tkinter_app() -> None:
                 if hex_c:
                     self.tree.tag_configure(tag_name, foreground=hex_c)
 
+                norm_e = safe_norm_path(e.path)
                 self.tree.insert(
                     "",
                     tk.END,
-                    iid=e.path,
+                    iid=norm_e,
                     values=(disp_name, sz_str, tp_str, dt),
                     tags=(tag_name,) if tag_name else (),
                 )
@@ -3608,7 +4378,7 @@ def run_tkinter_app() -> None:
             else:
                 for iid in sel:
                     if iid != "..parent.." and os.path.isfile(iid):
-                        open_path_with_os(iid)
+                        self._activate_file(iid)
             return "break"
 
         def _on_double_click(self, event) -> None:
@@ -3625,7 +4395,7 @@ def run_tkinter_app() -> None:
             elif os.path.isdir(iid):
                 self.navigate_to(iid)
             elif os.path.exists(iid):
-                open_path_with_os(iid)
+                self._activate_file(iid)
 
         def _on_drag_start(self, event) -> None:
             self.app.set_active_pane(self.pane_idx)
@@ -3687,21 +4457,19 @@ def run_tkinter_app() -> None:
         def _delete_paths(self, paths: List[str]) -> None:
             if not messagebox.askyesno("삭제 확인", f"{len(paths)}개 항목을 삭제하시겠습니까?"):
                 return
+            errors: List[str] = []
             for p_str in paths:
-                p = Path(p_str)
-                try:
-                    if p.is_dir():
-                        shutil.rmtree(p)
-                    else:
-                        p.unlink()
-                except Exception as exc:
-                    messagebox.showwarning("삭제 오류", str(exc))
+                ok_del, err_msg = safe_delete_path(p_str)
+                if not ok_del and err_msg:
+                    errors.append(err_msg)
             self.app.refresh_all()
+            if errors:
+                messagebox.showwarning("삭제 안내", "\n\n".join(errors[:5]))
 
     class TkQDirApp:
         def __init__(self) -> None:
             self.root = tk.Tk()
-            self.root.title("PyQuadDir Desktop Explorer (Tkinter Engine)")
+            self.root.title("PyQuadDir Desktop Explorer v2.4 (Tkinter Engine)")
             self.root.geometry("1440x880")
 
             self.config = load_app_config()
@@ -3874,9 +4642,9 @@ def run_tkinter_app() -> None:
                     return
                 mode = "copy" if ans else "move"
 
-            dest = Path(dest_dir)
+            dest = Path(safe_norm_path(dest_dir))
             for s in src_paths:
-                src = Path(s)
+                src = Path(safe_norm_path(s))
                 if not src.exists():
                     continue
                 target = get_unique_target_path(dest, src.name)
