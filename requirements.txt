@@ -1,0 +1,6 @@
+# Optional Qt GUI Engine (choose either PySide6 [LGPLv3] or PyQt6 [GPLv3])
+# Note: PyQuadDir also runs out-of-the-box with zero external dependencies via Python's built-in Tkinter fallback.
+PySide6>=6.5.0
+
+# Optional Standalone .EXE Packager
+pyinstaller>=6.0.0

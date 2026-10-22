@@ -1,0 +1,21 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller build / distribution artifacts
+build/
+dist/
+*.spec
+version_info.txt
+*.ico
+
+# Local workspace / scratch files
+_work/
+.venv/
+venv/
+ENV/
+
+# User runtime configuration
+.pyquaddir_config.json
+.qdir_py_config.json
