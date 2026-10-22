@@ -149,8 +149,8 @@ def generate_version_file(output_path: Path) -> Path:
     content = """# UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(2, 0, 0, 0),
+    prodvers=(2, 0, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -164,13 +164,13 @@ VSVersionInfo(
       StringTable(
         '041204B0',
         [StringStruct('CompanyName', 'PyQuadDir Open Source Project'),
-        StringStruct('FileDescription', 'PyQuadDir 4분할 다중 탭 파일 탐색기'),
-        StringStruct('FileVersion', '1.0.0.0'),
+        StringStruct('FileDescription', 'PyQuadDir v2.0 4분할 다중 탭 파일 탐색기'),
+        StringStruct('FileVersion', '2.0.0.0'),
         StringStruct('InternalName', 'PyQuadDir'),
         StringStruct('LegalCopyright', 'MIT License — Open Source Desktop Utility'),
         StringStruct('OriginalFilename', 'PyQuadDir.exe'),
         StringStruct('ProductName', 'PyQuadDir Desktop Explorer'),
-        StringStruct('ProductVersion', '1.0.0.0')])
+        StringStruct('ProductVersion', '2.0.0.0')])
       ]),
     VarFileInfo([VarStruct('Translation', [1042, 1200])])
   ]
