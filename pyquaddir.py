@@ -1,10 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-PyQuadDir Desktop Explorer v2.4 (Quad-View File Manager for Windows)
+PyQuadDir Desktop Explorer v2.5 (Quad-View File Manager for Windows)
 ================================================================
 실제 Windows 로컬 드라이브(C:\, D:\) 및 Google Drive 데스크톱 가상 드라이브(G:\ 등)를
 직접 제어하는 데스크톱 4분할(Quad) 다중 탭 파일 탐색기입니다.
+
+[v2.5 핵심 업데이트 — 종료 전 디렉터리 세션 완벽 복원 & 창 크기 튐 방지 & 4분할 상하 너비 동기화]
+1. 종료 전 열어둔 디렉터리/탭/활성 상태 실시간 자동 저장 및 재실행 시 100% 복원:
+   - 폴더 이동·탭 추가·탭 닫기·탭 전환·종료 시점마다 각 패널(1~4번 창)의 열린 탭 경로, 활성 탭 번호,
+     패널별 보기 모드, 창 크기 및 위치를 사용자 홈(`~/.qdir_py_config.json`)과 실행 파일 폴더(`.qdir_session.json`)에
+     동시 저장하여 재실행 시 마지막 작업 디렉터리가 그대로 열립니다.
+2. 텍스트 길이에 따른 창/패널 크기 튐(Jumping) 현상 완벽 제거 (`ElidedLabel` & `QSizePolicy.Ignored`):
+   - 긴 폴더 경로와 상태 요약 텍스트를 폭에 맞춰 말줄임표(`...`)로 렌더링하는 `ElidedLabel`을 도입하고,
+     모든 패널과 상태바의 최소 폭 힌트(`minimumSizeHint`)를 텍스트 길이와 분리하여 긴 폴더에 들어가도
+     창이나 분할 패널 크기가 절대 흔들리지 않습니다.
+3. 4분할(Quad) 레이아웃 상단·하단 패널 너비 완벽 통일 및 중앙 분할선 실시간 동기화:
+   - 4분할 선택 시 위쪽(1·2번 창)과 아래쪽(3·4번 창)의 좌우 너비를 정확히 50:50으로 맞추고,
+     위쪽 구분선을 드래그하면 아래쪽 구분선도 함께 움직이도록 동기화했습니다.
 
 [v2.4 핵심 업데이트 — HTML / Excel(.xlsx) / PDF 실행 불능 및 Google Drive(G:) 근본 원인 해결]
 1. 가상 드라이브 경로 왜곡(`Path.resolve()`) 전면 제거 & 표준 Win32 경로 유지:
@@ -38,6 +51,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import atexit
 import urllib.parse
 import xml.etree.ElementTree as ET
 import zipfile
@@ -675,23 +689,76 @@ def open_path_with_os(target_path: str, use_local_cache_for_virtual: bool = Fals
         subprocess.Popen(["xdg-open", norm_p])
 
 
+def get_config_candidate_paths() -> List[Path]:
+    """실행 파일(.exe 또는 .py) 옆의 세션 파일과 사용자 홈 설정 파일 경로를 모두 반환합니다."""
+    paths: List[Path] = []
+    try:
+        if getattr(sys, "frozen", False):
+            exe_dir = Path(os.path.dirname(os.path.abspath(sys.executable)))
+        else:
+            exe_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+        paths.append(exe_dir / ".pyquaddir_session.json")
+        legacy_sess = exe_dir / ".qdir_session.json"
+        if legacy_sess.exists():
+            paths.append(legacy_sess)
+    except Exception:
+        pass
+    if CONFIG_PATH not in paths:
+        paths.append(CONFIG_PATH)
+    if LEGACY_CONFIG_PATH.exists() and LEGACY_CONFIG_PATH not in paths:
+        paths.append(LEGACY_CONFIG_PATH)
+    return paths
+
+
 def load_app_config() -> Dict[str, object]:
-    for cfg_candidate in (CONFIG_PATH, LEGACY_CONFIG_PATH):
-        if cfg_candidate.exists():
-            try:
-                return json.loads(cfg_candidate.read_text(encoding="utf-8"))
-            except Exception:
-                continue
+    """가장 최근에 저장된 설정/세션 파일을 읽어 반환합니다."""
+    candidates = [p for p in get_config_candidate_paths() if p.exists()]
+    if not candidates:
+        return {}
+    # 수정 시각이 가장 최신인 설정 파일을 우선 로드
+    candidates.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0.0, reverse=True)
+    for c_path in candidates:
+        try:
+            data = json.loads(c_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data:
+                return data
+        except Exception:
+            continue
     return {}
 
 
 def save_app_config(data: Dict[str, object]) -> None:
-    try:
-        CONFIG_PATH.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-    except Exception:
-        pass
+    """종료 후 재실행 시 언제든 복원되도록 홈 폴더와 실행 폴더에 설정을 저장합니다."""
+    payload = json.dumps(data, ensure_ascii=False, indent=2)
+    for c_path in get_config_candidate_paths():
+        try:
+            c_path.write_text(payload, encoding="utf-8")
+        except Exception:
+            pass
+
+
+def resolve_restorable_dir(path_str: str) -> Optional[str]:
+    """
+    저장된 디렉터리 경로를 복원할 때 해당 폴더가 존재하면 그대로 반환하고,
+    만약 종료 사이에 하위 폴더가 삭제/이동되었다면 가장 가까운 상위 폴더를 찾아 반환합니다.
+    """
+    if not path_str:
+        return None
+    norm = normalize_user_input_path(str(path_str))
+    if not norm:
+        return None
+    curr = Path(norm)
+    for _ in range(15):
+        try:
+            if curr.exists() and curr.is_dir():
+                return safe_norm_path(str(curr))
+        except Exception:
+            pass
+        parent = curr.parent
+        if parent == curr:
+            break
+        curr = parent
+    return None
 
 
 def get_default_favorites() -> List[Dict[str, str]]:
@@ -918,11 +985,14 @@ def run_pyqt6_app() -> None:
     if binding == "PySide6":
         from PySide6.QtCore import (  # type: ignore
             QFileInfo,
+            QItemSelection,
+            QItemSelectionModel,
             QMimeData,
             QPoint,
             QPointF,
             QRectF,
             QSize,
+            QTimer,
             Qt,
             QUrl,
             Signal as pyqtSignal,
@@ -931,6 +1001,7 @@ def run_pyqt6_app() -> None:
             QColor,
             QDrag,
             QFont,
+            QFontMetrics,
             QIcon,
             QImageReader,
             QKeySequence,
@@ -962,6 +1033,7 @@ def run_pyqt6_app() -> None:
             QMessageBox,
             QPlainTextEdit,
             QPushButton,
+            QSizePolicy,
             QSplitter,
             QStackedWidget,
             QStatusBar,
@@ -977,11 +1049,14 @@ def run_pyqt6_app() -> None:
     else:
         from PyQt6.QtCore import (
             QFileInfo,
+            QItemSelection,
+            QItemSelectionModel,
             QMimeData,
             QPoint,
             QPointF,
             QRectF,
             QSize,
+            QTimer,
             Qt,
             QUrl,
             pyqtSignal,
@@ -990,6 +1065,7 @@ def run_pyqt6_app() -> None:
             QColor,
             QDrag,
             QFont,
+            QFontMetrics,
             QIcon,
             QImageReader,
             QKeySequence,
@@ -1021,6 +1097,7 @@ def run_pyqt6_app() -> None:
             QMessageBox,
             QPlainTextEdit,
             QPushButton,
+            QSizePolicy,
             QSplitter,
             QStackedWidget,
             QStatusBar,
@@ -1033,6 +1110,40 @@ def run_pyqt6_app() -> None:
             QVBoxLayout,
             QWidget,
         )
+
+    class ElidedLabel(QLabel):
+        """
+        텍스트 길이에 따라 위젯의 minimumSizeHint가 늘어나면서 창이나 분할 패널 크기가
+        튀는(Jumping) 현상을 원천 방지하는 말줄임(Elide) 전용 라벨입니다.
+        """
+        def __init__(
+            self,
+            text: str = "",
+            elide_mode: Qt.TextElideMode = Qt.TextElideMode.ElideRight,
+            parent: Optional[QWidget] = None,
+        ):
+            super().__init__(text, parent)
+            self._elide_mode = elide_mode
+            self.setMinimumWidth(0)
+            self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+
+        def minimumSizeHint(self) -> QSize:
+            return QSize(0, super().minimumSizeHint().height())
+
+        def sizeHint(self) -> QSize:
+            return QSize(120, super().sizeHint().height())
+
+        def paintEvent(self, event) -> None:
+            painter = QPainter(self)
+            metrics = QFontMetrics(self.font())
+            avail_w = max(10, self.contentsRect().width())
+            elided = metrics.elidedText(self.text(), self._elide_mode, avail_w)
+            painter.drawText(
+                self.contentsRect(),
+                int(self.alignment() | Qt.AlignmentFlag.AlignVCenter),
+                elided,
+            )
+            painter.end()
 
     # -----------------------------------------------------------------------
     # 고시인성 벡터 UI 아이콘 생성기 (20x20px 선명한 그래픽)
@@ -1246,7 +1357,7 @@ def run_pyqt6_app() -> None:
                 size_b = 0
 
             diag = diagnose_file_health(self.file_path)
-            self.setWindowTitle(f"🌐 Q-Dir 내장 만능 파일 뷰어 — {p.name} ({format_size(size_b)})")
+            self.setWindowTitle(f"🌐 PyQuadDir 내장 만능 파일 뷰어 — {p.name} ({format_size(size_b)})")
             self.resize(940, 660)
 
             layout = QVBoxLayout(self)
@@ -1459,8 +1570,6 @@ def run_pyqt6_app() -> None:
             sel_model = self.selectionModel()
             if sel_model is None:
                 return
-            from PyQt6.QtCore import QItemSelection, QItemSelectionModel
-
             selection = QItemSelection()
             max_col = self.columnCount() - 1
             for row in range(self.rowCount()):
@@ -1830,7 +1939,10 @@ def run_pyqt6_app() -> None:
             self.stack.addWidget(self.icon_list)
             layout.addWidget(self.stack, stretch=1)
 
-            self.summary_label = QLabel("")
+            self.address_edit.setMinimumWidth(60)
+            self.address_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+            self.summary_label = ElidedLabel("", Qt.TextElideMode.ElideRight)
             self.summary_label.setObjectName("PaneSummaryLabel")
             layout.addWidget(self.summary_label)
 
@@ -1877,6 +1989,7 @@ def run_pyqt6_app() -> None:
                 self.extra_zoom_px = 148
             self.refresh()
             self.stack.currentWidget().setFocus()
+            self.main_window.save_config()
 
         def step_view_mode_zoom(self, step: int) -> None:
             curr_idx = (
@@ -2791,8 +2904,7 @@ def run_pyqt6_app() -> None:
             self.setObjectName("InspectorPane")
             self.mode: str = "preview"
             self.current_target_path: str = ""
-            self.setMinimumWidth(290)
-            self.setMaximumWidth(500)
+            self.setFixedWidth(320)
             self._build_ui()
 
         def _build_ui(self) -> None:
@@ -2986,6 +3098,8 @@ def run_pyqt6_app() -> None:
             pane_index: int,
             main_window: "QDirMainWindow",
             initial_tabs: Optional[List[str]] = None,
+            initial_active_tab: int = 0,
+            initial_view_modes: Optional[List[str]] = None,
             parent: Optional[QWidget] = None,
         ):
             super().__init__(parent)
@@ -2994,15 +3108,26 @@ def run_pyqt6_app() -> None:
             self.main_window = main_window
             self.setFrameShape(QFrame.Shape.StyledPanel)
             self.setObjectName("ExplorerPane")
+            # 텍스트 길이에 따라 패널 크기가 절대 변하지 않도록 Ignored 정책 및 최소 크기 고정
+            self.setMinimumSize(160, 120)
+            self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
 
             self._build_ui()
 
             tabs_to_open = initial_tabs or [str(Path.home())]
-            for t_path in tabs_to_open:
-                if os.path.isdir(t_path):
-                    self.add_new_tab(t_path)
+            for t_i, t_path in enumerate(tabs_to_open):
+                restorable = resolve_restorable_dir(t_path)
+                if restorable:
+                    tab = self.add_new_tab(restorable)
+                    if initial_view_modes and t_i < len(initial_view_modes):
+                        v_mode = initial_view_modes[t_i]
+                        if v_mode in VIEW_MODE_LABELS and v_mode != tab.view_mode:
+                            tab.set_view_mode(v_mode)
             if self.tab_widget.count() == 0:
                 self.add_new_tab(str(Path.home()))
+
+            if 0 <= initial_active_tab < self.tab_widget.count():
+                self.tab_widget.setCurrentIndex(initial_active_tab)
 
         def _build_ui(self) -> None:
             layout = QVBoxLayout(self)
@@ -3015,9 +3140,10 @@ def run_pyqt6_app() -> None:
 
             self.badge_label = QLabel(f" #{self.pane_index + 1} ")
             self.badge_label.setObjectName("PaneBadge")
+            self.badge_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             header_bar.addWidget(self.badge_label)
 
-            self.path_title_label = QLabel("")
+            self.path_title_label = ElidedLabel("", Qt.TextElideMode.ElideMiddle)
             self.path_title_label.setObjectName("PaneTitlePath")
             header_bar.addWidget(self.path_title_label, stretch=1)
 
@@ -3026,15 +3152,21 @@ def run_pyqt6_app() -> None:
             self.btn_new_tab.setIcon(create_ui_icon("new", self.main_window.dark_mode, 16))
             self.btn_new_tab.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             self.btn_new_tab.setToolTip("현재 패널에 새 탭 추가 (Ctrl+T)")
+            self.btn_new_tab.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             self.btn_new_tab.clicked.connect(lambda: self.add_new_tab(self.current_path()))
             header_bar.addWidget(self.btn_new_tab)
 
             layout.addLayout(header_bar)
 
             self.tab_widget = QTabWidget()
+            self.tab_widget.setMinimumWidth(0)
+            self.tab_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             self.tab_widget.setTabsClosable(True)
             self.tab_widget.setMovable(True)
             self.tab_widget.setDocumentMode(True)
+            self.tab_widget.setUsesScrollButtons(True)
+            self.tab_widget.tabBar().setExpanding(False)
+            self.tab_widget.tabBar().setElideMode(Qt.TextElideMode.ElideRight)
             self.tab_widget.tabCloseRequested.connect(self.close_tab)
             self.tab_widget.currentChanged.connect(self._on_tab_changed)
             layout.addWidget(self.tab_widget, stretch=1)
@@ -3045,10 +3177,11 @@ def run_pyqt6_app() -> None:
             self.style().polish(self)
 
         def add_new_tab(self, path_str: Optional[str] = None) -> DirectoryTab:
-            target = path_str if (path_str and os.path.isdir(path_str)) else str(Path.home())
+            restorable = resolve_restorable_dir(path_str or "")
+            target = restorable if restorable else str(Path.home())
             tab = DirectoryTab(target, self.main_window, self)
             tab.pathChanged.connect(lambda new_p, t=tab: self._update_tab_title(t, new_p))
-            tab.statusUpdated.connect(self.main_window.statusBar().showMessage)
+            tab.statusUpdated.connect(self.main_window.show_status_message)
             tab.selectionChangedSignal.connect(self.main_window.on_active_selection_changed)
             tab.openInNewTabRequested.connect(self.add_new_tab)
             tab.paneActivated.connect(lambda: self.paneActivated.emit(self.pane_index))
@@ -3057,6 +3190,7 @@ def run_pyqt6_app() -> None:
             self.tab_widget.setTabToolTip(idx, target)
             self.tab_widget.setCurrentIndex(idx)
             self._update_tab_title(tab, target)
+            self.main_window.save_config()
             return tab
 
         def close_tab(self, index: int) -> None:
@@ -3066,6 +3200,7 @@ def run_pyqt6_app() -> None:
             self.tab_widget.removeTab(index)
             if w is not None:
                 w.deleteLater()
+            self.main_window.save_config()
 
         def current_tab(self) -> Optional[DirectoryTab]:
             w = self.tab_widget.currentWidget()
@@ -3096,11 +3231,21 @@ def run_pyqt6_app() -> None:
                     paths.append(w.current_path)
             return paths
 
+        def get_all_tab_view_modes(self) -> List[str]:
+            modes: List[str] = []
+            for i in range(self.tab_widget.count()):
+                w = self.tab_widget.widget(i)
+                if isinstance(w, DirectoryTab):
+                    modes.append(w.view_mode)
+            return modes
+
         def _on_tab_changed(self, index: int) -> None:
             t = self.current_tab()
             if t:
                 self.path_title_label.setText(t.current_path)
+                self.path_title_label.setToolTip(t.current_path)
                 t.update_status_summary()
+            self.main_window.save_config()
 
         def _update_tab_title(self, tab: DirectoryTab, new_path: str) -> None:
             idx = self.tab_widget.indexOf(tab)
@@ -3109,6 +3254,8 @@ def run_pyqt6_app() -> None:
                 self.tab_widget.setTabToolTip(idx, new_path)
             if tab == self.current_tab():
                 self.path_title_label.setText(new_path)
+                self.path_title_label.setToolTip(new_path)
+            self.main_window.save_config()
 
         @staticmethod
         def _short_tab_name(path_str: str) -> str:
@@ -3317,10 +3464,25 @@ def run_pyqt6_app() -> None:
     class QDirMainWindow(QMainWindow):
         def __init__(self):
             super().__init__()
-            self.setWindowTitle("PyQuadDir Desktop Explorer v2.4 — 4분할 다중 탭 파일 탐색기")
-            self.resize(1520, 940)
+            self._is_initializing: bool = True
+            self._syncing_splitters: bool = False
+            self.panes: List[ExplorerPane] = []
+
+            self.setWindowTitle("PyQuadDir Desktop Explorer v2.5 — 4분할 다중 탭 파일 탐색기")
+            self.setMinimumSize(960, 620)
 
             self.config = load_app_config()
+            geom = self.config.get("window_geometry")
+            if isinstance(geom, list) and len(geom) >= 4:
+                try:
+                    w = max(960, int(geom[2]))
+                    h = max(620, int(geom[3]))
+                    self.resize(w, h)
+                except Exception:
+                    self.resize(1520, 940)
+            else:
+                self.resize(1520, 940)
+
             self.dark_mode: bool = bool(self.config.get("dark_mode", True))
             self.color_filter_enabled: bool = bool(self.config.get("color_filter_enabled", True))
             self.color_rules: Dict[str, Dict[str, object]] = self.config.get(  # type: ignore[assignment]
@@ -3335,7 +3497,8 @@ def run_pyqt6_app() -> None:
             self.show_file_extensions: bool = bool(self.config.get("show_file_extensions", True))
             self.show_hidden_files: bool = bool(self.config.get("show_hidden_files", False))
 
-            self.active_pane_index: int = 0
+            saved_active_pane = int(self.config.get("active_pane_index", 0))  # type: ignore[arg-type]
+            self.active_pane_index: int = saved_active_pane if 0 <= saved_active_pane < 4 else 0
             self.clipboard_paths: List[str] = []
             self.clipboard_mode: str = "copy"
 
@@ -3343,10 +3506,36 @@ def run_pyqt6_app() -> None:
             self._apply_theme()
             self._refresh_toolbar_icons()
             self.set_layout_mode(self.current_layout_mode)
-            self._set_active_pane(0)
+            self._set_active_pane(self.active_pane_index)
+
+            self._is_initializing = False
+            self.save_config()
+            atexit.register(self.save_config)
+
+        def showEvent(self, event) -> None:
+            super().showEvent(event)
+            if not getattr(self, "_initial_equalized", False):
+                self._initial_equalized = True
+                QTimer.singleShot(0, self.equalize_splitters)
+                QTimer.singleShot(60, self.equalize_splitters)
+
+        def show_status_message(self, msg: str, timeout: int = 0) -> None:
+            """상태 표시줄 텍스트가 길어져도 메인 창 폭이 절대 늘어나지 않도록 말줄임 처리합니다."""
+            sb = self.statusBar()
+            if sb is None:
+                return
+            metrics = QFontMetrics(sb.font())
+            avail_w = max(250, self.width() - 40)
+            elided = metrics.elidedText(msg, Qt.TextElideMode.ElideMiddle, avail_w)
+            sb.showMessage(elided, timeout)
 
         def save_config(self) -> None:
+            if getattr(self, "_is_initializing", False) or len(self.panes) < 4:
+                return
             pane_tabs = [pane.get_all_tab_paths() for pane in self.panes]
+            pane_active_tab_indices = [pane.tab_widget.currentIndex() for pane in self.panes]
+            pane_tab_view_modes = [pane.get_all_tab_view_modes() for pane in self.panes]
+            geom_rect = self.normalGeometry() if self.isMaximized() else self.geometry()
             save_app_config({
                 "dark_mode": self.dark_mode,
                 "color_filter_enabled": self.color_filter_enabled,
@@ -3357,10 +3546,21 @@ def run_pyqt6_app() -> None:
                 "show_icons": self.show_icons,
                 "show_file_extensions": self.show_file_extensions,
                 "show_hidden_files": self.show_hidden_files,
+                "active_pane_index": self.active_pane_index,
                 "pane_tabs": pane_tabs,
+                "pane_active_tab_indices": pane_active_tab_indices,
+                "pane_tab_view_modes": pane_tab_view_modes,
+                "window_geometry": [
+                    geom_rect.x(),
+                    geom_rect.y(),
+                    geom_rect.width(),
+                    geom_rect.height(),
+                    self.isMaximized(),
+                ],
             })
 
         def closeEvent(self, event) -> None:
+            self._is_initializing = False
             self.save_config()
             super().closeEvent(event)
 
@@ -3519,6 +3719,14 @@ def run_pyqt6_app() -> None:
             self.main_splitter = QSplitter(Qt.Orientation.Vertical)
             self.top_splitter = QSplitter(Qt.Orientation.Horizontal)
             self.bottom_splitter = QSplitter(Qt.Orientation.Horizontal)
+            for sp in (self.main_splitter, self.top_splitter, self.bottom_splitter):
+                sp.setChildrenCollapsible(False)
+                sp.setHandleWidth(5)
+
+            # 4분할(Quad) 모드에서 위쪽(1·2번)과 아래쪽(3·4번) 좌우 분할선을 항상 동일 너비로 동기화
+            self.top_splitter.splitterMoved.connect(self._on_top_splitter_moved)
+            self.bottom_splitter.splitterMoved.connect(self._on_bottom_splitter_moved)
+
             central_layout.addWidget(self.main_splitter, stretch=1)
 
             self.inspector_pane = InspectorPane(self)
@@ -3526,25 +3734,51 @@ def run_pyqt6_app() -> None:
             central_layout.addWidget(self.inspector_pane)
 
             saved_pane_tabs = self.config.get("pane_tabs", [])
+            saved_active_tabs = self.config.get("pane_active_tab_indices", [])
+            saved_view_modes = self.config.get("pane_tab_view_modes", [])
             default_starts = get_initial_4_paths()
 
-            self.panes: List[ExplorerPane] = []
+            self.panes = []
             for i in range(4):
                 init_tabs: List[str] = []
                 if isinstance(saved_pane_tabs, list) and i < len(saved_pane_tabs):
                     candidate_list = saved_pane_tabs[i]
                     if isinstance(candidate_list, list):
-                        init_tabs = [safe_norm_path(str(p)) for p in candidate_list if os.path.isdir(str(p))]
+                        for p_item in candidate_list:
+                            restored = resolve_restorable_dir(str(p_item))
+                            if restored:
+                                init_tabs.append(restored)
                 if not init_tabs:
                     init_tabs = [default_starts[i]]
 
-                pane = ExplorerPane(i, self, initial_tabs=init_tabs)
+                act_tab_idx = 0
+                if isinstance(saved_active_tabs, list) and i < len(saved_active_tabs):
+                    try:
+                        act_tab_idx = int(saved_active_tabs[i])
+                    except Exception:
+                        act_tab_idx = 0
+
+                v_modes: Optional[List[str]] = None
+                if isinstance(saved_view_modes, list) and i < len(saved_view_modes):
+                    if isinstance(saved_view_modes[i], list):
+                        v_modes = [str(m) for m in saved_view_modes[i]]
+
+                pane = ExplorerPane(
+                    i,
+                    self,
+                    initial_tabs=init_tabs,
+                    initial_active_tab=act_tab_idx,
+                    initial_view_modes=v_modes,
+                )
                 pane.paneActivated.connect(self._set_active_pane)
                 self.panes.append(pane)
 
-            self.setStatusBar(QStatusBar())
-            self.statusBar().showMessage(
-                "준비 완료 — 파일이 안 열릴 때 더블클릭하거나 우클릭 → [🌐 내장 만능 뷰어로 보기]를 누르면 원인을 진단하고 바로 열람합니다."
+            sb = QStatusBar()
+            sb.setMinimumWidth(0)
+            sb.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            self.setStatusBar(sb)
+            self.show_status_message(
+                "준비 완료 — 종료 전 열어둔 모든 디렉터리와 탭 상태가 실시간으로 자동 저장 및 복원됩니다."
             )
             self._register_shortcuts()
 
@@ -3874,6 +4108,29 @@ def run_pyqt6_app() -> None:
                 if t and self.inspector_pane.isVisible():
                     sel = t.selected_file_paths()
                     self.inspector_pane.inspect_path(sel[0] if sel else t.current_path)
+                self.save_config()
+
+        def _on_top_splitter_moved(self, pos: int, index: int) -> None:
+            if self._syncing_splitters or self.current_layout_mode != "quad":
+                return
+            self._syncing_splitters = True
+            try:
+                sizes = self.top_splitter.sizes()
+                if len(sizes) == 2 and self.bottom_splitter.count() == 2:
+                    self.bottom_splitter.setSizes(sizes)
+            finally:
+                self._syncing_splitters = False
+
+        def _on_bottom_splitter_moved(self, pos: int, index: int) -> None:
+            if self._syncing_splitters or self.current_layout_mode != "quad":
+                return
+            self._syncing_splitters = True
+            try:
+                sizes = self.bottom_splitter.sizes()
+                if len(sizes) == 2 and self.top_splitter.count() == 2:
+                    self.top_splitter.setSizes(sizes)
+            finally:
+                self._syncing_splitters = False
 
         def set_layout_mode(self, mode: str) -> None:
             self.current_layout_mode = mode
@@ -3954,14 +4211,39 @@ def run_pyqt6_app() -> None:
                 target_pane.show()
 
             self.equalize_splitters()
+            QTimer.singleShot(0, self.equalize_splitters)
+            self.save_config()
 
         def equalize_splitters(self) -> None:
-            if self.main_splitter.count() == 2:
-                self.main_splitter.setSizes([500, 500])
-            if self.top_splitter.count() == 2:
-                self.top_splitter.setSizes([500, 500])
-            if self.bottom_splitter.count() == 2:
-                self.bottom_splitter.setSizes([500, 500])
+            """위·아래·좌·우 모든 분할 창의 너비와 높이를 정확히 1:1(50%:50%)로 균등 정렬합니다."""
+            self._syncing_splitters = True
+            try:
+                total_w = max(1000, self.main_splitter.width())
+                total_h = max(800, self.main_splitter.height())
+                half_w = total_w // 2
+                half_h = total_h // 2
+
+                for sp in (self.main_splitter, self.top_splitter, self.bottom_splitter):
+                    if sp.count() == 2:
+                        sp.setStretchFactor(0, 1)
+                        sp.setStretchFactor(1, 1)
+
+                if self.main_splitter.count() == 2:
+                    if self.main_splitter.orientation() == Qt.Orientation.Vertical:
+                        self.main_splitter.setSizes([half_h, total_h - half_h])
+                    else:
+                        self.main_splitter.setSizes([half_w, total_w - half_w])
+
+                if self.top_splitter.count() == 2:
+                    self.top_splitter.setSizes([half_w, total_w - half_w])
+
+                if self.bottom_splitter.count() == 2:
+                    if self.bottom_splitter.orientation() == Qt.Orientation.Horizontal:
+                        self.bottom_splitter.setSizes([half_w, total_w - half_w])
+                    else:
+                        self.bottom_splitter.setSizes([half_h, total_h - half_h])
+            finally:
+                self._syncing_splitters = False
 
         def add_favorite(self, path_str: str) -> None:
             norm = safe_norm_path(path_str)
@@ -4144,7 +4426,11 @@ def run_pyqt6_app() -> None:
     app.setFont(font)
 
     win = QDirMainWindow()
-    win.show()
+    geom = win.config.get("window_geometry")
+    if isinstance(geom, list) and len(geom) >= 5 and bool(geom[4]):
+        win.showMaximized()
+    else:
+        win.show()
     sys.exit(app.exec())
 
 
@@ -4209,7 +4495,7 @@ def run_tkinter_app() -> None:
             vsb.pack(side=tk.RIGHT, fill=tk.Y)
 
             self.summary_var = tk.StringVar(value="")
-            ttk.Label(self, textvariable=self.summary_var).pack(fill=tk.X, padx=4, pady=2)
+            ttk.Label(self, textvariable=self.summary_var, width=1, anchor="w").pack(fill=tk.X, padx=4, pady=2)
 
             self.tree.bind("<FocusIn>", lambda e: self.app.set_active_pane(self.pane_idx))
             self.tree.bind("<Double-1>", self._on_double_click)
@@ -4265,6 +4551,7 @@ def run_tkinter_app() -> None:
                 self.history_idx = len(self.history) - 1
             self.refresh()
             self.app.update_tab_title(self.pane_idx, self)
+            self.app.save_config()
 
         def _activate_file(self, file_path: str) -> None:
             diag = diagnose_file_health(file_path)
@@ -4468,9 +4755,11 @@ def run_tkinter_app() -> None:
 
     class TkQDirApp:
         def __init__(self) -> None:
+            self._is_initializing = True
             self.root = tk.Tk()
-            self.root.title("PyQuadDir Desktop Explorer v2.4 (Tkinter Engine)")
+            self.root.title("PyQuadDir Desktop Explorer v2.5 (Tkinter Engine)")
             self.root.geometry("1440x880")
+            self.root.minsize(920, 600)
 
             self.config = load_app_config()
             self.dark_mode = bool(self.config.get("dark_mode", False))
@@ -4481,12 +4770,53 @@ def run_tkinter_app() -> None:
             self.favorites: List[Dict[str, str]] = self.config.get(  # type: ignore[assignment]
                 "favorites", get_default_favorites()
             )
-            self.active_pane_idx = 0
+            self.current_layout_mode = str(self.config.get("layout_mode", "quad"))
+            self.active_pane_idx = int(self.config.get("active_pane_index", 0))  # type: ignore[arg-type]
+            if not (0 <= self.active_pane_idx < 4):
+                self.active_pane_idx = 0
             self.drag_source_tab: Optional[TkDirectoryTab] = None
             self.font_size = 10
             self.style = ttk.Style(self.root)
 
             self._build_ui()
+            self._is_initializing = False
+            self.save_config()
+            self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+            atexit.register(self.save_config)
+
+        def _on_close(self) -> None:
+            self._is_initializing = False
+            self.save_config()
+            self.root.destroy()
+
+        def save_config(self) -> None:
+            if getattr(self, "_is_initializing", False) or len(getattr(self, "notebooks", [])) < 4:
+                return
+            pane_tabs: List[List[str]] = []
+            pane_active_indices: List[int] = []
+            for nb in self.notebooks:
+                tabs_list: List[str] = []
+                sel_id = nb.select()
+                act_idx = 0
+                for t_i, tab_id in enumerate(nb.tabs()):
+                    w = nb.nametowidget(tab_id)
+                    if isinstance(w, TkDirectoryTab) and w.current_path:
+                        tabs_list.append(w.current_path)
+                    if tab_id == sel_id:
+                        act_idx = t_i
+                pane_tabs.append(tabs_list)
+                pane_active_indices.append(act_idx)
+
+            save_app_config({
+                "dark_mode": self.dark_mode,
+                "color_filter_enabled": self.color_filter_enabled,
+                "color_rules": self.color_rules,
+                "favorites": self.favorites,
+                "layout_mode": self.current_layout_mode,
+                "active_pane_index": self.active_pane_idx,
+                "pane_tabs": pane_tabs,
+                "pane_active_tab_indices": pane_active_indices,
+            })
 
         def step_font_zoom(self, step: int) -> None:
             self.font_size = max(9, min(18, self.font_size + step))
@@ -4530,27 +4860,51 @@ def run_tkinter_app() -> None:
             self.grid_frame = ttk.Frame(self.root)
             self.grid_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
             for r in range(2):
-                self.grid_frame.rowconfigure(r, weight=1)
+                self.grid_frame.rowconfigure(r, weight=1, uniform="quad_row")
             for c in range(2):
-                self.grid_frame.columnconfigure(c, weight=1)
+                self.grid_frame.columnconfigure(c, weight=1, uniform="quad_col")
 
             self.pane_frames: List[ttk.LabelFrame] = []
             self.notebooks: List[ttk.Notebook] = []
+            saved_pane_tabs = self.config.get("pane_tabs", [])
+            saved_active_tabs = self.config.get("pane_active_tab_indices", [])
             starts = get_initial_4_paths()
 
             for i in range(4):
                 lf = ttk.LabelFrame(self.grid_frame, text=f" 패널 #{i+1} ")
+                lf.grid_propagate(False)
                 hdr = ttk.Frame(lf)
                 hdr.pack(fill=tk.X, padx=2, pady=1)
                 ttk.Button(hdr, text="➕ 새 탭", command=lambda idx=i: self.add_tab(idx, self.get_pane_current_path(idx))).pack(side=tk.RIGHT)
 
                 nb = ttk.Notebook(lf)
                 nb.pack(fill=tk.BOTH, expand=True)
+                nb.bind("<<NotebookTabChanged>>", lambda e: self.save_config())
                 self.pane_frames.append(lf)
                 self.notebooks.append(nb)
-                self.add_tab(i, starts[i])
 
-            self.set_layout("quad")
+                init_tabs: List[str] = []
+                if isinstance(saved_pane_tabs, list) and i < len(saved_pane_tabs):
+                    if isinstance(saved_pane_tabs[i], list):
+                        for p_item in saved_pane_tabs[i]:
+                            restored = resolve_restorable_dir(str(p_item))
+                            if restored:
+                                init_tabs.append(restored)
+                if not init_tabs:
+                    init_tabs = [starts[i]]
+
+                for t_path in init_tabs:
+                    self.add_tab(i, t_path)
+
+                if isinstance(saved_active_tabs, list) and i < len(saved_active_tabs):
+                    try:
+                        act_i = int(saved_active_tabs[i])
+                        if 0 <= act_i < len(nb.tabs()):
+                            nb.select(nb.tabs()[act_i])
+                    except Exception:
+                        pass
+
+            self.set_layout(self.current_layout_mode if self.current_layout_mode in ("quad", "2h", "2v", "single") else "quad")
 
         def _rebuild_fav_bar(self) -> None:
             for w in self.fav_bar.winfo_children():
@@ -4564,6 +4918,7 @@ def run_tkinter_app() -> None:
                 ).pack(side=tk.LEFT, padx=2)
 
         def set_layout(self, mode: str) -> None:
+            self.current_layout_mode = mode
             for lf in self.pane_frames:
                 lf.grid_forget()
             if mode == "quad":

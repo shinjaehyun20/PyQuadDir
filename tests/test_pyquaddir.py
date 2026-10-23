@@ -119,6 +119,19 @@ class TestPyQuadDirCore(unittest.TestCase):
             self.assertEqual(sheets[0][0], "Summary")
             self.assertEqual(sheets[0][1][0], ["Item", "Status"])
 
+    def test_v25_resolve_restorable_dir_and_config_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            sub_dir = tmp_p / "existing_parent" / "deleted_child" / "grandchild"
+            (tmp_p / "existing_parent").mkdir(parents=True, exist_ok=True)
+
+            # Even when deleted_child/grandchild no longer exists, resolve_restorable_dir finds existing_parent
+            restored = pyquaddir.resolve_restorable_dir(str(sub_dir))
+            self.assertEqual(restored, pyquaddir.safe_norm_path(str(tmp_p / "existing_parent")))
+
+            candidates = pyquaddir.get_config_candidate_paths()
+            self.assertGreaterEqual(len(candidates), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -149,8 +149,8 @@ def generate_version_file(output_path: Path) -> Path:
     content = """# UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(2, 4, 0, 0),
-    prodvers=(2, 4, 0, 0),
+    filevers=(2, 5, 0, 0),
+    prodvers=(2, 5, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -164,13 +164,13 @@ VSVersionInfo(
       StringTable(
         '041204B0',
         [StringStruct('CompanyName', 'PyQuadDir Open Source Project'),
-        StringStruct('FileDescription', 'PyQuadDir v2.2 4분할 다중 탭 파일 탐색기'),
-        StringStruct('FileVersion', '2.4.0.0'),
+        StringStruct('FileDescription', 'PyQuadDir v2.5 4분할 다중 탭 파일 탐색기'),
+        StringStruct('FileVersion', '2.5.0.0'),
         StringStruct('InternalName', 'PyQuadDir'),
         StringStruct('LegalCopyright', 'MIT License — Open Source Desktop Utility'),
         StringStruct('OriginalFilename', 'PyQuadDir.exe'),
         StringStruct('ProductName', 'PyQuadDir Desktop Explorer'),
-        StringStruct('ProductVersion', '2.4.0.0')])
+        StringStruct('ProductVersion', '2.5.0.0')])
       ]),
     VarFileInfo([VarStruct('Translation', [1042, 1200])])
   ]
@@ -358,6 +358,24 @@ def main() -> int:
         onefile=not args.onedir,
         clean=True,
     )
+
+    # 실행 중인 PyQuadDir.exe가 있어 삭제가 거부될 경우 .old로 이름 변경 우회 (Windows MoveFile 허용 활용)
+    existing_exe = base_dir / "dist" / f"{APP_NAME}.exe"
+    old_exe = base_dir / "dist" / f"{APP_NAME}.exe.old"
+    if old_exe.exists():
+        try:
+            old_exe.unlink()
+        except OSError:
+            pass
+    if existing_exe.exists():
+        try:
+            existing_exe.unlink()
+        except PermissionError:
+            try:
+                existing_exe.replace(old_exe)
+                print(f"[*] 실행 중인 {existing_exe.name} 파일을 {old_exe.name}로 이동하여 무중단 업데이트를 진행합니다.")
+            except OSError:
+                pass
 
     print("\n[*] PyInstaller 패키징을 시작합니다 (약 30초~1분 소요)...")
     print("    명령어:", " ".join(cmd))

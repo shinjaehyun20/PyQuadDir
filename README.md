@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/Engine-PySide6%20%7C%20PyQt6%20%7C%20Tkinter-41CD52?style=for-the-badge&logo=qt&logoColor=white" alt="GUI Engine" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Platform" />
-  <img src="https://img.shields.io/badge/Release-v2.4.0-2563EB?style=for-the-badge" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v2.5.0-2563EB?style=for-the-badge" alt="Release Version" />
   <img src="https://img.shields.io/badge/License-MIT-F59E0B?style=for-the-badge" alt="License" />
 </p>
 
@@ -78,13 +78,13 @@
 
 | 카테고리 | 주요 기능명 | 기술적 구현 및 사용자 가치 |
 | :--- | :--- | :--- |
-| **🪟 Layout & Tabs** | **6종 화면 분할 & 다중 탭** | • **2×2 4분할(`Ctrl+1`)**, 좌/우 2분할(`Ctrl+2`), 상/하 2분할(`Ctrl+3`), 3분할(`Ctrl+4`/`5`), 단일 최대화(`Ctrl+6`) 즉시 전환<br>• 패널별 브라우저 스타일 다중 탭(`Ctrl+T`, `Ctrl+W`, 마우스 휠 클릭 닫기) 및 스플리터 비율 균등 정렬 |
+| **🪟 Layout & Tabs (v2.5)** | **6종 화면 분할 & 상·하단 50:50 동기화** | • **2×2 4분할(`Ctrl+1`)** 선택 시 위(`#1`·`#2`)·아래(`#3`·`#4`) 패널 너비 **50:50 정밀 일치 및 상·하단 중앙 구분선 실시간 연동**<br>• 긴 경로/파일명 진입 시에도 창 크기가 절대 튀지 않는 **`ElidedLabel` & `QSizePolicy.Ignored`** 레이아웃 잠금 |
 | **🎨 Vector UI (v2.2)** | **고시인성 컬러 벡터 아이콘** | • 작은 텍스트 기호 대신 `QPainter` 안티앨리어싱으로 직접 렌더링한 **20×20px Windows 11 스타일 컬러 벡터 아이콘** 적용<br>• 다크 모드(`#0F172A`) / 라이트 모드(`#F1F5F9`) 원클릭 전환 및 확장자별 자동 색상 하이라이트 필터 |
 | **🔍 View & Zoom (v2.2)** | **`Ctrl + 마우스 휠` 8단계 실시간 줌** | • 패널 위에서 `Ctrl + 마우스 휠` 스크롤만으로 **자세히 → 목록 → 콘텐츠 → 타일 → 작은 아이콘(48px) → 보통 아이콘(76px) → 큰 아이콘(108px) → 아주 큰 아이콘(148px~220px)** 연속 확대/축소<br>• 이미지 파일(`.png`, `.jpg`, `.webp`, `.bmp`, `.gif` 등) 실시간 비동기 썸네일 프리뷰 |
 | **🖼️ Inspector & Viewer (v2.4)** | **내장 Excel/HTML 만능 뷰어 & 세부 정보** | • **내장 만능 뷰어(`🌐 내장 만능 뷰어로 보기`)**: 외부 프로그램 없이 `.xlsx` 엑셀 시트 표, `.html` 웹 렌더링 화면, `.md`/`.txt` 문서, 파일 헤더(HEX)를 앱 내부에서 즉시 열람<br>• **우측 미리 보기 / 세부 정보 창**: 이미지 리사이즈 뷰어, 픽셀 해상도(`W × H px`), 타임스탬프 실시간 표시 |
 | **🛡️ Cloud & File Diagnostics (v2.4)** | **가상 드라이브(G:) 호환 & 매직 헤더 진단** | • **`safe_norm_path` 엔진**: Google Drive(`G:`) 등 가상 드라이브에서 `Path.resolve()`로 인한 `\\?\` 디바이스 경로 왜곡 및 삭제 차단(`WinError 387`) 원천 해결<br>• **`diagnose_file_health`**: 실행 전 파일 매직 바이트(`%PDF-`, `PK`, `OLE2`)를 검사하여 클라우드 미동기화(0B), 확장자 불일치(`.xls`/`.html` → `.xlsx`), DRM 암호화 여부를 즉시 진단 및 **로컬 캐시(`C:`) 우회 실행** 지원 |
 | **⌨️ Navigation (v2.4)** | **키보드 고속 제어 & `file:///` 주소창 해독** | • **`Enter` / `Backspace`**: 선택 폴더 즉시 진입·파일 실행 및 상위 폴더 이동<br>• 브라우저에서 복사한 `file:///...` 및 `%20`/한글 퍼센트 인코딩 주소를 주소창에 붙여넣으면 자동 디코딩 후 해당 파일/폴더로 즉시 이동 |
-| **💾 Persistence** | **2층 즐겨찾기 바 & 세션 보존** | • 상단 2층 전체 폭을 사용하는 **즐겨찾기 전용 바(⭐)** 및 드라이브 용량 게이지 드롭다운(`💽 드라이브 ▼`)<br>• 종료 시 열려 있던 4개 패널의 모든 탭 경로, 레이아웃, 테마, 색상 규칙을 `~/.pyquaddir_config.json`에 자동 보존 |
+| **💾 Persistence (v2.5)** | **실시간 세션 자동 복원 & 2층 즐겨찾기 바** | • 폴더 이동·탭 전환·종료(`closeEvent` & `atexit`) 시점마다 **4개 패널의 열린 탭 경로, 활성 탭 번호, 보기 모드, 창 크기**를 홈(`~/.pyquaddir_config.json`)과 실행 폴더(`.pyquaddir_session.json`)에 실시간 이중 저장 및 **재실행 시 100% 복원** (`resolve_restorable_dir` 상위 폴더 자동 탐색 포함) |
 
 ---
 
@@ -215,12 +215,16 @@ python build_exe.py
   - [x] `QPainter` 기반 20×20px 고시인성 Windows 11 컬러 벡터 아이콘 엔진 (`create_ui_icon`)
   - [x] `Ctrl + 마우스 휠` 실시간 보기 모드 전환 및 최대 220px 연속 썸네일 줌
   - [x] 테이블 뷰 & 아이콘 그리드 뷰 `Enter`/`Return` 폴더 진입·파일 실행 및 `Backspace` 상위 이동 완비
-- [x] **v2.4 (Current)**:
+- [x] **v2.4**:
   - [x] Google Drive(`G:`) 등 가상 드라이브 경로 왜곡(`Path.resolve()`) 전면 제거 및 로컬 캐시(`C:`) 우회 실행 엔진
   - [x] 실행 전 파일 매직 헤더(`%PDF-`, `PK`, `OLE2`, 기업 DRM) & 클라우드 스트리밍(0바이트) 정밀 진단기 (`diagnose_file_health`)
   - [x] 외부 프로그램 없이 동작하는 **내장 Excel(`.xlsx`) 시트 표 뷰어 & HTML 렌더링 만능 뷰어** 탑재
   - [x] 주소창 `file:///` 프로토콜 및 URL 퍼센트 인코딩(`%20`, 한글) 자동 해독 & 파일 경로 직접 포커싱
-- [ ] **v2.5 (Planned)**: 정규표현식(Regex) 기반 다중 파일 일괄 이름 변경(Batch Rename) 유틸리티 및 폴더 용량 트리 분석기
+- [x] **v2.5 (Current)**:
+  - [x] 종료 전 열어둔 4개 패널 디렉터리·활성 탭·보기 모드·창 크기 실시간 이중 저장 및 재실행 시 100% 복원 (`resolve_restorable_dir`)
+  - [x] 긴 경로/파일명 진입 시 창·패널 크기 튐(Jumping) 원천 차단 (`ElidedLabel` & `QSizePolicy.Ignored`)
+  - [x] 4분할(`quad`) 선택 시 위·아래 패널 너비 50:50 정밀 통일 및 상·하단 중앙 구분선 실시간 동기화
+- [ ] **v2.6 (Planned)**: 정규표현식(Regex) 기반 다중 파일 일괄 이름 변경(Batch Rename) 유틸리티 및 폴더 용량 트리 분석기
 
 ---
 

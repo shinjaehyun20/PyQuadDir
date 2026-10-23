@@ -4,10 +4,11 @@
 - **Canonical Workspace Path**: `D:\workspace\projects\active\pyquaddir`
 - **Desktop Shortcut**: `%USERPROFILE%\Desktop\PyQuadDir.lnk` -> `D:\workspace\projects\active\pyquaddir\dist\PyQuadDir.exe`
 - **GitHub Repository**: `https://github.com/shinjaehyun20/PyQuadDir` (Public, MIT License)
-- **Current Version**: `v2.4.0` (`2026-10-23`)
+- **Current Version**: `v2.5.0` (`2026-10-23`)
 - **Status**: `ACTIVE / PRODUCTION`
 
-## Summary of Capabilities (v2.4.0)
+## Summary of Capabilities (v2.5.0)
+- **Real-Time Session Restoration & Layout Lock (v2.5)**: Real-time dual-path session persistence (`~/.pyquaddir_config.json` & `.pyquaddir_session.json`) on every folder navigation/tab switch/exit with `resolve_restorable_dir()` parent fallback, `ElidedLabel` (`QSizePolicy.Ignored`) zero-jump layout stabilization, and 50:50 synchronized top/bottom quad splitters (`_on_top_splitter_moved` / `_on_bottom_splitter_moved`).
 - **Triple-Engine Support**: Automatic `PySide6` / `PyQt6` detection with built-in `Tkinter (ttk)` zero-dependency fallback (`--tk`).
 - **Virtual Drive (`G:`) Safe Path & Pre-Launch Diagnostics (v2.4)**: Removed `Path.resolve()` distortion via `safe_norm_path()`, added pre-launch magic header & cloud streaming diagnostics (`diagnose_file_health`), and local temp cache bypass execution (`copy_to_local_temp_cache`).
 - **Built-in Universal `.xlsx` / `.html` / HEX Viewer (v2.4)**: Zero-dependency `.xlsx` sheet table parser (`parse_xlsx_preview_sheets`), HTML previewer, and smart encoding text reader (`read_text_file_smart`) plus `file:///` URL-encoded address bar navigation (`normalize_user_input_path`).
