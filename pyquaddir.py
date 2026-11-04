@@ -1,7 +1,48 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-PyQuadDir Desktop Explorer v2.5 (Quad-View File Manager for Windows)
+PyQuadDir Desktop Explorer v3.1 (Quad-View File Manager for Windows)
+================================================================
+[v3.1 보안·무결성·트랜잭션 아카이브 엔진 & 프로필 격리/호환 패치 (기준본 v3.0 B3810E3827B1)]
+1. [사전 전수 검사 (Pre-Write Full Inspection)] 첫 바이트 쓰기 전 ZIP·TAR 모든 엔트리 및 대상 경로 검증:
+   - 상위 경로 탈출(`..`), 드라이브 문자(`C:\`, `C:rel`), 루트/절대 경로(`/absolute.txt`, `\absolute.txt`),
+     UNC 네트워크 경로(`\\server\share`, `//server/share`), NTFS 대체 데이터 스트림(`file.txt:stream`, `::$DATA`),
+     Windows 예약 장치명(`CON`, `PRN`, `AUX`, `NUL`, `COM1~9`, `LPT1~9`, 확장자 포함 `NUL.txt`),
+     세그먼트 끝 공백/점(`file.txt `, `file.`, `dir./a`), 제어 문자 및 금지 특수문자를 100% 사전 차단합니다.
+   - 아카이브 내부 심볼릭/하드 링크·FIFO·디바이스·Reparse 속성(ZIP `S_ISLNK`/`0x400`, TAR `issym`/`islnk`/`isdev`)과
+     대상 폴더 트리의 기존 심볼릭 링크·Windows Junction(`mklink /J`)·Reparse Point를 모두 탐지해 차단합니다.
+   - 아카이브 내부 대소문자 무시 중복(`Report.txt` vs `report.txt`), 파일↔폴더 경로 충돌, 대상 폴더 내 기존
+     파일/디렉터리(대소문자 무시 포함) 충돌을 첫 쓰기 전에 차단합니다.
+   - 파이썬 경로 검증을 우회하는 외부 추출기(`7z`, `tar`) CLI 폴백을 기본 비활성화했습니다.
+2. [기본 덮어쓰기 금지 & 전용 스테이징(Staging) 추출 후 원자적 반영]:
+   - 기본값(`overwrite=False`)으로 기존 파일·폴더 변경 및 덮어쓰기를 절대 금지합니다.
+   - 전용 임시 스테이징 폴더에 먼저 추출·검증한 뒤 대상 폴더로 트랜잭션 반영하며, 중간 실패나 동시 충돌 시
+     커밋된 항목을 즉시 롤백하여 기존 대상 파일(`existing.txt`)이 손상되거나 부분 반입이 남지 않습니다.
+   - 압축 생성(`compress_items_to_archive`) 역시 기존 아카이브를 절대 먼저 삭제하거나 덮어쓰지 않습니다.
+3. [기존 UI/UX 개선 유지 + Qt/Tk 설정 무손실 호환 + 테스트 전용 프로필(`--profile-dir`) 완벽 격리]:
+   - 4분할 균등 폭 및 분할선 동기화, 다중 탭·세션 복원, 다크모드 즐겨찾기 가독성, Enter 실행/폴더 진입,
+     Ctrl+마우스 휠 보기 전환, QRubberBand 드래그 선택, 360px/780px 반응형 뷰포트, 긴 한글 파일명 크기 안정성 유지.
+   - Qt↔Tk 엔진 전환 시 상대 엔진의 보기·창·탭·즐겨찾기 설정을 지우지 않고 병합 보존합니다.
+   - `--profile-dir <DIR>` / `--config <FILE>` / `QDIR_PROFILE_DIR` / `QDIR_CONFIG_PATH` 지정 시 사용자 홈(`~`)과
+     실행 파일 인접 설정(`.qdir_session.json`)을 일절 읽거나 쓰지 않습니다.
+================================================================
+[v3.0 멀티 에이전트 오케스트레이션 통합 업데이트 — 5대 UX/기능 패치 & 모던 UI 리서치 반영]
+1. [세션 #1] 다크모드 즐겨찾기 바 가시성 100% 보장 (FavToolbar 전용 QSS + 인라인 고대비 스타일):
+   - 다크모드에서 즐겨찾기 라벨(#FBBF24 골드 앰버)과 즐겨찾기 버튼(#F8FAFC 선명한 화이트 텍스트, #0F172A 배경, #334155 보더, 호버 시 #2563EB)이 OS 기본 테마 간섭 없이 선명하게 표시됩니다.
+2. [세션 #2] 패널 내 마우스 드래그 다중 영역 선택 (RubberBand / Marquee Selection):
+   - 빈 공간이나 미선택 항목에서 마우스 좌클릭 드래그 시 Windows 탐색기처럼 반투명 선택 사각형(QRubberBand)이 나타나며 교차하는 모든 파일/폴더가 실시간으로 다중 선택됩니다('..' 상위 폴더 자동 제외).
+   - 이미 선택된 항목 위에서 드래그할 때만 다른 패널로 파일 이동/복사(Drag & Drop)가 시작됩니다.
+3. [세션 #2] 스마트폰 원격 브라우저 360px(세로) / 780px(가로) 반응형 뷰포트 엔진:
+   - 최소 창 크기를 320x420px로 완화하고, 창 폭에 따라 자동으로:
+     • <= 520px (360px 세로): 1분할(single) + 상단 [#1][#2][#3][#4] 원터치 패널 스위처 바 + 아이콘 툴바 축약 + 부가 컬럼(유형/수정일) 자동 숨김
+     • 521~860px (780px 가로): 좌/우 2분할(2h) + 상단 [1·2번 창 보기]<->[3·4번 창 보기] 페어 스위처 + 슬림 툴바/필터
+     • > 860px (데스크톱): 4분할(quad) 및 전체 컬럼/버튼 자동 복원 (레이아웃 메뉴에서 360px/780px/1520px 원클릭 프리셋 테스트 지원)
+4. [세션 #3] 디렉토리·파일 다중 압축(.zip / .tar.gz / .tar) 및 스마트 압축 풀기 엔진:
+   - 상단 [🗜️ 압축/해제 ▾] 버튼, 우클릭 메뉴, 단축키(Alt+F5 압축 / Alt+F6 해제) 지원.
+   - 현재 폴더 풀기, '<파일명>/' 하위 폴더 생성 후 풀기, [1~4번 다른 패널로 즉시 압축 풀기] 지원.
+   - 구형 알집/Windows ZIP의 한글 파일명(CP949/EUC-KR) 자동 감지 복원 및 Zip Slip 경로 탈출 차단.
+5. [세션 #1] 디폴트(자세히) 및 타일(Tiles)·아이콘 보기 영역 확장 & 텍스트/아이콘 밀림 해결:
+   - 타일 모드 그리드(292x80, 아이템 284x74, 아이콘 48px), 보통 아이콘(118x130), 큰 아이콘(144x160), 자세히 보기(행 높이 34px, 아이콘 22px) 및 한글 시각 폭 기반 스마트 말줄임(elide_middle_smart)을 적용해 아이콘과 텍스트가 절대 겹치거나 밀리지 않습니다.
 ================================================================
 실제 Windows 로컬 드라이브(C:\, D:\) 및 Google Drive 데스크톱 가상 드라이브(G:\ 등)를
 직접 제어하는 데스크톱 4분할(Quad) 다중 탭 파일 탐색기입니다.
@@ -29,41 +70,45 @@ PyQuadDir Desktop Explorer v2.5 (Quad-View File Manager for Windows)
      아직 다운로드되지 않은 `.html`, `.pdf`, `.xlsx`는 0 바이트 또는 불완전 스트림으로 전달되어
      Chrome에서는 빈 화면, Acrobat/Excel에서는 "파일이 손상되었거나 확장명이 잘못되었다"는 오류가 발생합니다.
    - 실행 전 파일 스트림을 먼저 읽어 동기화(Hydration)를 유도하고, 가상 드라이브 핸들 충돌 시
-     로컬 임시 캐시(`%TEMP%\PyQuadDir_OpenCache`)로 복사 후 실행하는 우회 모드를 지원합니다.
+     로컬 임시 캐시(`%TEMP%\QDir_OpenCache`)로 복사 후 실행하는 우회 모드를 지원합니다.
 3. 파일 매직 헤더(Magic Bytes) 정밀 진단기 (`diagnose_file_health`):
    - `.pdf`(`%PDF-`), `.xlsx`(`PK\x03\x04` ZIP), `.xls`(`D0 CF 11 E0` OLE2), 기업용 DRM 암호화(`FASOO`,
      `SoftCamp`, `MarkAny` 등 — 감리/PMO 문서에서 빈번), 확장자 불일치(실제 내용은 HTML/XLS인데 확장자만
      .xlsx인 경우)를 1ms 만에 판별하여 왜 안 열리는지 정확한 원인과 해결책을 즉시 안내합니다.
 4. 내장 Excel(`.xlsx`) 표 뷰어 & 내장 HTML/텍스트 뷰어 탑재:
-   - 외부 프로그램 없이도 `.xlsx` 엑셀 시트 내용, `.html` 웹 문서, `.md`/`.txt`를 PyQuadDir 내부에서
+   - 외부 프로그램 없이도 `.xlsx` 엑셀 시트 내용, `.html` 웹 문서, `.md`/`.txt`를 Q-Dir 내부에서
      즉시 표와 렌더링 화면으로 열람할 수 있습니다.
 5. 주소창 `file:///` 및 `%20` URL 인코딩 자동 해독 & 다단계 안전 삭제(`safe_delete_path`) 지원.
 """
 
 from __future__ import annotations
 
+import argparse
 import ctypes
 import datetime
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 import atexit
 import urllib.parse
 import xml.etree.ElementTree as ET
+import stat
+import tarfile
 import zipfile
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 # ---------------------------------------------------------------------------
 # 공통 설정 및 확장자 색상 필터 프리셋
 # ---------------------------------------------------------------------------
-CONFIG_PATH = Path.home() / ".pyquaddir_config.json"
-LEGACY_CONFIG_PATH = Path.home() / ".qdir_py_config.json"
+CONFIG_PATH = Path.home() / ".qdir_py_config.json"
 
 IMAGE_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".svg", ".tif", ".tiff"
@@ -158,6 +203,1138 @@ VIEW_MODE_LABELS: Dict[str, str] = {k: v for k, v, _ in VIEW_MODES_META}
 # ---------------------------------------------------------------------------
 # 경로 정규화 & URL 디코딩 & 가상 드라이브(Google Drive G:) 안전 헬퍼
 # ---------------------------------------------------------------------------
+
+ARCHIVE_EXTENSIONS = {
+    ".zip", ".tar", ".gz", ".tgz", ".bz2", ".tbz2", ".xz", ".txz"
+}
+
+FILE_ATTRIBUTE_REPARSE_POINT = 0x0400
+IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
+IO_REPARSE_TAG_SYMLINK = 0xA000000C
+
+WINDOWS_RESERVED_NAMES: Set[str] = {
+    "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "CLOCK$",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+    "COM¹", "COM²", "COM³", "LPT¹", "LPT²", "LPT³",
+}
+
+WINDOWS_INVALID_CHARS: Set[str] = set('<>:"|?*')
+
+
+def is_archive_file(file_path: str) -> bool:
+    if not file_path or os.path.isdir(file_path):
+        return False
+    name_low = Path(file_path).name.lower()
+    if name_low.endswith((".tar.gz", ".tar.bz2", ".tar.xz")):
+        return True
+    return Path(name_low).suffix in ARCHIVE_EXTENSIONS
+
+
+def strip_archive_stem(file_path: str) -> str:
+    name = Path(file_path).name
+    low = name.lower()
+    for compound in (".tar.gz", ".tar.bz2", ".tar.xz"):
+        if low.endswith(compound):
+            return name[: -len(compound)] or "extracted"
+    return Path(name).stem or "extracted"
+
+
+def decode_zip_filename(info: zipfile.ZipInfo) -> str:
+    """구형 Windows/알집 ZIP 엔트리의 CP949/EUC-KR 한글 파일명(0x800 미설정 또는 CP437 모지바케)을 복원합니다."""
+    raw_name = info.filename
+    if all(ord(ch) < 128 for ch in raw_name):
+        return raw_name
+    try:
+        raw_bytes = raw_name.encode("cp437")
+    except UnicodeEncodeError:
+        # 이미 정상 유니코드(예: 한글 음절 U+AC00~U+D7A3)인 경우 그대로 반환
+        return raw_name
+    for enc in ("utf-8", "cp949", "euc-kr"):
+        try:
+            return raw_bytes.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw_name
+
+
+def is_symlink_or_reparse_point(path_str: str) -> bool:
+    """
+    지정된 경로가 심볼릭 링크, Windows 디렉터리 Junction(mklink /J), 마운트 포인트,
+    또는 Reparse Point인지 정밀 판별합니다.
+    """
+    if not path_str:
+        return False
+    try:
+        if os.path.islink(path_str):
+            return True
+    except Exception:
+        pass
+    try:
+        st = os.lstat(path_str)
+        if stat.S_ISLNK(st.st_mode):
+            return True
+        file_attrs = getattr(st, "st_file_attributes", 0)
+        if isinstance(file_attrs, int) and (file_attrs & FILE_ATTRIBUTE_REPARSE_POINT):
+            return True
+        reparse_tag = getattr(st, "st_reparse_tag", 0)
+        if isinstance(reparse_tag, int) and reparse_tag != 0:
+            return True
+    except FileNotFoundError:
+        return False
+    except Exception:
+        pass
+    if platform.system() == "Windows":
+        try:
+            attrs = ctypes.windll.kernel32.GetFileAttributesW(str(path_str))
+            if attrs != 0xFFFFFFFF and (attrs & FILE_ATTRIBUTE_REPARSE_POINT):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _find_case_insensitive_existing(parent_dir: str, segment_name: str) -> Optional[str]:
+    """parent_dir 내부에서 segment_name과 대소문자 구분 없이 일치하는 기존 항목 경로를 반환합니다."""
+    if not parent_dir or not segment_name:
+        return None
+    direct = os.path.join(parent_dir, segment_name)
+    try:
+        if os.path.lexists(direct):
+            return direct
+    except Exception:
+        pass
+    try:
+        if not os.path.isdir(parent_dir) or is_symlink_or_reparse_point(parent_dir):
+            return None
+        target_cf = segment_name.casefold()
+        with os.scandir(parent_dir) as it:
+            for entry in it:
+                if entry.name.casefold() == target_cf:
+                    return os.path.join(parent_dir, entry.name)
+    except Exception:
+        pass
+    return None
+
+
+def _ensure_no_reparse_in_base_dir(base_dir: str) -> None:
+    """대상 기준 폴더 자체 및 상위 경로에 심볼릭 링크/Junction이 없는지 검사합니다."""
+    norm_base = safe_norm_path(base_dir)
+    if not norm_base:
+        raise PermissionError("보안 차단: 유효하지 않은 대상 폴더 경로입니다.")
+    curr = Path(norm_base)
+    chain: List[Path] = []
+    while True:
+        chain.append(curr)
+        if curr.parent == curr:
+            break
+        curr = curr.parent
+    # 루트(드라이브 루트)는 제외하고 하위 경로 체인에서 링크/Junction 여부 확인
+    for p in reversed(chain[:-1]):
+        p_str = str(p)
+        if os.path.lexists(p_str) and is_symlink_or_reparse_point(p_str):
+            raise PermissionError(
+                f"보안 차단: 대상 경로 체인에 심볼릭 링크 또는 Junction(Reparse Point)이 존재합니다 ({p_str})"
+            )
+
+
+def _validate_segment_security(seg: str, full_raw_path: str) -> None:
+    """단일 경로 세그먼트에 대해 탈출·예약어·끝 공백/점·금지 문자·ADS 여부를 검증합니다."""
+    if not seg:
+        raise PermissionError(f"보안 차단: 빈 경로 세그먼트가 포함되어 있습니다 ({full_raw_path})")
+    if seg == "..":
+        raise PermissionError(f"보안 차단: 상위 폴더 탈출('..') 경로가 포함되어 있습니다 ({full_raw_path})")
+    if seg == ".":
+        raise PermissionError(f"보안 차단: 허용되지 않는 상대 현재 경로('.') 세그먼트입니다 ({full_raw_path})")
+    if seg.endswith(" ") or seg.endswith("."):
+        raise PermissionError(
+            f"보안 차단: 파일/폴더 이름 끝에 공백 또는 마침표('.')를 사용할 수 없습니다 ({full_raw_path})"
+        )
+    if ":" in seg:
+        raise PermissionError(
+            f"보안 차단: NTFS 대체 데이터 스트림(ADS) 또는 드라이브 콜론(':')이 포함되어 있습니다 ({full_raw_path})"
+        )
+    for ch in seg:
+        if ord(ch) < 32 or ch in WINDOWS_INVALID_CHARS:
+            raise PermissionError(
+                f"보안 차단: 파일명에 허용되지 않는 특수/제어 문자가 포함되어 있습니다 ({full_raw_path})"
+            )
+    stem = seg.rstrip(" .").split(".")[0].upper()
+    if stem in WINDOWS_RESERVED_NAMES:
+        raise PermissionError(
+            f"보안 차단: Windows 예약 장치 파일명('{seg}')은 사용할 수 없습니다 ({full_raw_path})"
+        )
+
+
+def validate_archive_member_path(dest_root: str, member_rel_path: str) -> Tuple[str, List[str], bool]:
+    r"""
+    ZIP·TAR 항목의 경로를 첫 쓰기 전에 정밀 검증하고 (안전한 대상 절대경로, 세그먼트 리스트, 디렉터리 여부)를 반환합니다.
+    차단 대상:
+      - 빈 문자열, NULL 바이트, 제어 문자(< 0x20)
+      - 절대 경로(`/absolute.txt`, `\absolute.txt`) 및 UNC 경로(`\\server\share\a`, `//server/share/a`)
+      - Windows 드라이브 문자(`C:\evil.txt`, `C:/evil.txt`, `C:relative.txt`)
+      - NTFS 대체 데이터 스트림(ADS: `file.txt:stream`, `file.txt::$DATA`, `dir:ads/a.txt`)
+      - 상위 경로 탈출(`..`) 및 현재 경로(`.`) 세그먼트
+      - 세그먼트 끝 공백/마침표(`file.txt `, `file.`), Windows 금지 특수문자(`<>:"|?*`)
+      - Windows 예약 파일명(`CON`, `PRN`, `AUX`, `NUL`, `COM1..9`, `LPT1..9` 등 확장자 포함)
+      - 대상 폴더 내부의 기존 심볼릭 링크 / Junction(Reparse Point) 경유
+    """
+    if not isinstance(member_rel_path, str) or not member_rel_path:
+        raise PermissionError("보안 차단: 비어 있는 압축 항목 경로입니다.")
+    if "\x00" in member_rel_path:
+        raise PermissionError("보안 차단: NULL 바이트가 포함된 경로입니다.")
+    for ch in member_rel_path:
+        if ord(ch) < 32:
+            raise PermissionError(f"보안 차단: 제어 문자가 포함된 압축 항목 경로입니다 ({member_rel_path!r})")
+
+    # 1. 루트/절대 경로 및 UNC 경로 차단 (선행 '/' 또는 '\' 제거 금지!)
+    if member_rel_path.startswith(("/", "\\")):
+        if member_rel_path.startswith(("\\\\", "//")):
+            raise PermissionError(f"보안 차단: UNC 네트워크 경로 형식은 허용되지 않습니다 ({member_rel_path})")
+        raise PermissionError(f"보안 차단: 루트/절대 경로 형식은 허용되지 않습니다 ({member_rel_path})")
+
+    # 2. 드라이브 문자 및 NTFS ADS(':') 차단
+    if re.match(r"^[A-Za-z]:", member_rel_path):
+        raise PermissionError(f"보안 차단: 드라이브 문자가 포함된 경로는 허용되지 않습니다 ({member_rel_path})")
+    if ":" in member_rel_path:
+        raise PermissionError(
+            f"보안 차단: NTFS 대체 데이터 스트림(ADS) 또는 콜론(':') 경로는 허용되지 않습니다 ({member_rel_path})"
+        )
+
+    is_dir_entry = member_rel_path.endswith(("/", "\\"))
+    normalized_slashes = member_rel_path.replace("\\", "/")
+    if is_dir_entry:
+        normalized_slashes = normalized_slashes.rstrip("/")
+
+    if not normalized_slashes:
+        raise PermissionError(f"보안 차단: 유효한 하위 경로가 없는 항목입니다 ({member_rel_path})")
+
+    raw_segments = normalized_slashes.split("/")
+    clean_segments: List[str] = []
+    for seg in raw_segments:
+        _validate_segment_security(seg, member_rel_path)
+        clean_segments.append(seg)
+
+    norm_root = safe_norm_path(dest_root)
+    _ensure_no_reparse_in_base_dir(norm_root)
+
+    target = safe_norm_path(os.path.join(norm_root, *clean_segments))
+    try:
+        common = os.path.commonpath([norm_root, target])
+    except ValueError:
+        raise PermissionError(f"보안 차단: 대상 폴더와 다른 드라이브를 가리키는 경로입니다 ({member_rel_path})")
+
+    if common.casefold() != norm_root.casefold() or target.casefold() == norm_root.casefold():
+        raise PermissionError(f"보안 차단: 대상 폴더 외부를 가리키는 압축 항목입니다 ({member_rel_path})")
+
+    # 3. 대상 폴더 내부의 기존 경로 체인에 심볼릭 링크/Junction(Reparse Point)이 있는지 검사
+    real_root = safe_norm_path(os.path.realpath(norm_root))
+    curr_parent = norm_root
+    for seg in clean_segments:
+        existing_match = _find_case_insensitive_existing(curr_parent, seg)
+        check_path = existing_match if existing_match is not None else os.path.join(curr_parent, seg)
+        if os.path.lexists(check_path):
+            if is_symlink_or_reparse_point(check_path):
+                raise PermissionError(
+                    f"보안 차단: 대상 경로에 심볼릭 링크 또는 Junction(Reparse Point)이 존재합니다 ({check_path})"
+                )
+            real_check = safe_norm_path(os.path.realpath(check_path))
+            try:
+                if os.path.commonpath([real_root, real_check]).casefold() != real_root.casefold():
+                    raise PermissionError(
+                        f"보안 차단: 대상 경로가 외부 디렉터리(Junction/심볼릭 링크)로 연결되어 있습니다 ({check_path})"
+                    )
+            except ValueError:
+                raise PermissionError(
+                    f"보안 차단: 대상 경로가 다른 드라이브(Junction)로 연결되어 있습니다 ({check_path})"
+                )
+        curr_parent = check_path
+
+    return target, clean_segments, is_dir_entry
+
+
+def _validate_safe_extract_dest(dest_root: str, member_rel_path: str) -> str:
+    """하위 호환 래퍼: ZIP·TAR 항목 경로 검증 후 안전한 대상 절대 경로를 반환합니다."""
+    target, _, _ = validate_archive_member_path(dest_root, member_rel_path)
+    return target
+
+
+def _check_zip_member_not_link_or_special(info: zipfile.ZipInfo, decoded_name: str) -> None:
+    """ZIP 엔트리가 심볼릭 링크, Reparse Point, FIFO/소켓/디바이스 특수 파일인지 검사합니다."""
+    unix_mode = (info.external_attr >> 16) & 0xFFFF
+    dos_attr = info.external_attr & 0xFFFF
+    if stat.S_ISLNK(unix_mode):
+        raise PermissionError(f"보안 차단: ZIP 내부에 심볼릭 링크 항목이 포함되어 있습니다 ({decoded_name})")
+    if (
+        stat.S_ISFIFO(unix_mode)
+        or stat.S_ISCHR(unix_mode)
+        or stat.S_ISBLK(unix_mode)
+        or stat.S_ISSOCK(unix_mode)
+    ):
+        raise PermissionError(f"보안 차단: ZIP 내부에 특수 디바이스/파이프 항목이 포함되어 있습니다 ({decoded_name})")
+    if dos_attr & FILE_ATTRIBUTE_REPARSE_POINT:
+        raise PermissionError(
+            f"보안 차단: ZIP 내부에 Windows Junction/Reparse Point 속성 항목이 포함되어 있습니다 ({decoded_name})"
+        )
+
+
+def _check_tar_member_not_link_or_special(member: tarfile.TarInfo) -> None:
+    """TAR 엔트리가 심볼릭 링크, 하드 링크, FIFO, 디바이스 파일인지 검사합니다."""
+    if member.issym() or member.islnk():
+        raise PermissionError(
+            f"보안 차단: TAR 내부에 심볼릭/하드 링크 항목이 포함되어 있습니다 ({member.name} -> {member.linkname})"
+        )
+    if member.isfifo() or member.ischr() or member.isblk() or member.isdev():
+        raise PermissionError(f"보안 차단: TAR 내부에 특수 디바이스/파이프 항목이 포함되어 있습니다 ({member.name})")
+    if not (member.isfile() or member.isdir()):
+        raise PermissionError(f"보안 차단: 지원하지 않는 TAR 특수 엔트리 유형입니다 ({member.name})")
+
+
+def inspect_archive_entries(
+    archive_path: str,
+    target_root: str,
+    overwrite: bool = False,
+) -> Tuple[str, List[Dict[str, Any]]]:
+    """
+    첫 바이트를 디스크에 쓰기 전에 ZIP·TAR 아카이브의 모든 엔트리와 대상 폴더를 전수 검사합니다.
+    검증 항목:
+      1. 아카이브 형식 판별 (.zip / .tar 계열)
+      2. 모든 엔트리의 경로 안전성 (.., 드라이브, 절대/루트, UNC, NTFS ADS, 예약어, 끝 공백/점)
+      3. 아카이브 내 심볼릭/하드 링크·Junction/Reparse·특수 파일 차단
+      4. 아카이브 내부 대소문자 무시 중복 파일(`a.txt` vs `A.TXT`) 및 파일↔폴더 충돌 차단
+      5. 대상 폴더 내 기존 심볼릭 링크/Junction 차단 및 기존 파일/폴더 충돌 차단(`overwrite=False`)
+    """
+    arc_norm = safe_norm_path(archive_path)
+    if overwrite:
+        raise ValueError("보안 정책상 기존 파일 덮어쓰기(overwrite=True) 경로는 제공하지 않습니다.")
+    if not os.path.isfile(arc_norm):
+        raise FileNotFoundError(f"압축 파일을 찾을 수 없습니다: {arc_norm}")
+    if is_symlink_or_reparse_point(arc_norm):
+        raise PermissionError(f"보안 차단: 심볼릭 링크 또는 Junction 압축 파일은 열 수 없습니다 ({arc_norm})")
+
+    norm_target_root = safe_norm_path(target_root)
+    _ensure_no_reparse_in_base_dir(norm_target_root)
+
+    low_name = Path(arc_norm).name.lower()
+    archive_kind = ""
+    raw_entries: List[Dict[str, Any]] = []
+
+    if low_name.endswith(".zip") or zipfile.is_zipfile(arc_norm):
+        archive_kind = "zip"
+        with zipfile.ZipFile(arc_norm, "r") as zf:
+            for idx, info in enumerate(zf.infolist()):
+                decoded_name = decode_zip_filename(info)
+                _check_zip_member_not_link_or_special(info, decoded_name)
+                is_dir = decoded_name.endswith(("/", "\\")) or info.is_dir()
+                raw_entries.append({
+                    "index": idx,
+                    "raw_name": decoded_name,
+                    "is_dir": is_dir,
+                    "zip_info": info,
+                })
+    elif tarfile.is_tarfile(arc_norm) or low_name.endswith(
+        (".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz")
+    ):
+        archive_kind = "tar"
+        with tarfile.open(arc_norm, "r:*") as tf:
+            for idx, member in enumerate(tf.getmembers()):
+                _check_tar_member_not_link_or_special(member)
+                raw_entries.append({
+                    "index": idx,
+                    "raw_name": member.name,
+                    "is_dir": member.isdir(),
+                    "tar_member_name": member.name,
+                })
+    else:
+        raise ValueError(
+            "지원하지 않는 압축 형식이거나 손상된 아카이브입니다 (보안을 위해 외부 추출기 실행이 비활성화됨)."
+        )
+
+    seen_files_ci: Dict[str, str] = {}
+    seen_dirs_ci: Dict[str, str] = {}
+    validated_plan: List[Dict[str, Any]] = []
+
+    for entry in raw_entries:
+        raw_name = str(entry["raw_name"])
+        target_abs, segments, is_dir_syntax = validate_archive_member_path(norm_target_root, raw_name)
+        is_dir = bool(entry["is_dir"] or is_dir_syntax)
+        rel_norm = "/".join(segments)
+        rel_ci = rel_norm.casefold()
+
+        # 아카이브 내부 상위 디렉터리 프리픽스 충돌 검사
+        for depth in range(1, len(segments)):
+            prefix_rel = "/".join(segments[:depth])
+            prefix_ci = prefix_rel.casefold()
+            if prefix_ci in seen_files_ci:
+                raise FileExistsError(
+                    f"압축 항목 충돌 차단: 파일('{seen_files_ci[prefix_ci]}')과 하위 폴더 경로('{raw_name}')가 충돌합니다."
+                )
+            seen_dirs_ci.setdefault(prefix_ci, prefix_rel)
+
+        if is_dir:
+            if rel_ci in seen_files_ci:
+                raise FileExistsError(
+                    f"압축 항목 충돌 차단: 파일('{seen_files_ci[rel_ci]}')과 폴더('{raw_name}') 이름이 중복됩니다."
+                )
+            seen_dirs_ci.setdefault(rel_ci, raw_name)
+        else:
+            if rel_ci in seen_files_ci:
+                raise FileExistsError(
+                    f"보안/무결성 차단: 압축 파일 내 대소문자 중복 항목이 존재합니다 ('{seen_files_ci[rel_ci]}' vs '{raw_name}')"
+                )
+            if rel_ci in seen_dirs_ci:
+                raise FileExistsError(
+                    f"압축 항목 충돌 차단: 폴더('{seen_dirs_ci[rel_ci]}')와 파일('{raw_name}') 이름이 중복됩니다."
+                )
+            seen_files_ci[rel_ci] = raw_name
+
+        # 대상 파일시스템 기존 항목(대소문자 무시 포함) 충돌 검사
+        curr_fs_dir = norm_target_root
+        for depth, seg in enumerate(segments):
+            is_last = depth == len(segments) - 1
+            existing_match = _find_case_insensitive_existing(curr_fs_dir, seg)
+            if existing_match is not None:
+                if is_symlink_or_reparse_point(existing_match):
+                    raise PermissionError(
+                        f"보안 차단: 대상 경로에 심볼릭 링크 또는 Junction(Reparse Point)이 존재합니다 ({existing_match})"
+                    )
+                if not overwrite:
+                    raise FileExistsError(
+                        f"기존 파일/폴더 보호(덮어쓰기 금지): 대상에 이미 '{existing_match}' 항목이 존재합니다."
+                    )
+                if not is_last and not os.path.isdir(existing_match):
+                    raise FileExistsError(
+                        f"경로 충돌 차단: 대상의 기존 파일('{existing_match}') 위에 하위 폴더를 생성할 수 없습니다."
+                    )
+                if is_last:
+                    if is_dir and not os.path.isdir(existing_match):
+                        raise FileExistsError(
+                            f"경로 충돌 차단: 대상의 기존 파일('{existing_match}')과 압축 폴더('{raw_name}')가 충돌합니다."
+                        )
+                    if (not is_dir) and os.path.isdir(existing_match):
+                        raise FileExistsError(
+                            f"경로 충돌 차단: 대상의 기존 폴더('{existing_match}')와 압축 파일('{raw_name}')이 충돌합니다."
+                        )
+                curr_fs_dir = existing_match
+            else:
+                curr_fs_dir = os.path.join(curr_fs_dir, seg)
+
+        validated_plan.append({
+            **entry,
+            "is_dir": is_dir,
+            "segments": segments,
+            "rel_norm": rel_norm,
+            "target_abs": target_abs,
+        })
+
+    return archive_kind, validated_plan
+
+
+def _assert_tree_contains_no_reparse_or_links(root_dir: str) -> None:
+    """원본 또는 스테이징 트리를 순회하며 심볼릭 링크나 Junction(Reparse Point)이 없는지 검증합니다."""
+    norm_r = safe_norm_path(root_dir)
+    if is_symlink_or_reparse_point(norm_r):
+        raise PermissionError(f"보안 차단: 루트 경로가 심볼릭 링크 또는 Junction입니다 ({norm_r})")
+    if not os.path.isdir(norm_r):
+        return
+    for cur_root, dirs, files in os.walk(norm_r, followlinks=False):
+        if is_symlink_or_reparse_point(cur_root):
+            raise PermissionError(f"보안 차단: 하위 경로에 심볼릭 링크 또는 Junction이 포함되어 있습니다 ({cur_root})")
+        for name in list(dirs) + list(files):
+            full_p = os.path.join(cur_root, name)
+            if is_symlink_or_reparse_point(full_p):
+                raise PermissionError(
+                    f"보안 차단: 경로 내부에 심볼릭 링크 또는 Junction(Reparse Point)이 포함되어 있습니다 ({full_p})"
+                )
+
+
+def compress_items_to_archive(
+    src_paths: List[str],
+    output_archive_path: str,
+    archive_format: str = "zip",
+    overwrite: bool = False,
+) -> Tuple[bool, str, int]:
+    """
+    선택한 파일 및 디렉토리(하위 폴더 및 빈 폴더 포함)를 .zip, .tar.gz, .tar 포맷으로 압축합니다.
+    - 기본값(overwrite=False)으로 기존 아카이브 파일을 절대 삭제하거나 덮어쓰지 않습니다.
+    - 원본 항목에 심볼릭 링크/Junction이 있으면 사전 차단합니다.
+    - 전용 임시 파일에 먼저 생성·검증한 뒤 최종 경로로 반영합니다.
+    반환값: (성공 여부, 생성된 압축파일 경로 또는 오류 메시지, 압축된 항목 수)
+    """
+    if overwrite:
+        return False, "보안 정책상 기존 아카이브 덮어쓰기(overwrite=True) 경로는 제공하지 않습니다.", 0
+    if not src_paths:
+        return False, "압축할 원본 파일이나 폴더가 지정되지 않았습니다.", 0
+
+    valid_srcs: List[str] = []
+    seen_top_names_ci: Set[str] = set()
+    for raw_p in src_paths:
+        norm_p = safe_norm_path(raw_p)
+        if not norm_p or not os.path.lexists(norm_p):
+            return False, f"압축할 원본 경로가 존재하지 않습니다: {raw_p}", 0
+        try:
+            _ensure_no_reparse_in_base_dir(norm_p)
+            _assert_tree_contains_no_reparse_or_links(norm_p)
+        except Exception as exc:
+            return False, f"압축 보안 차단: {exc}", 0
+        top_ci = Path(norm_p).name.casefold()
+        if top_ci in seen_top_names_ci:
+            return False, f"압축 차단: 대소문자를 무시했을 때 동일한 이름의 원본 항목이 중복 선택되었습니다 ({Path(norm_p).name})", 0
+        seen_top_names_ci.add(top_ci)
+        valid_srcs.append(norm_p)
+
+    out_norm = safe_norm_path(output_archive_path)
+    fmt = archive_format.lower().strip(".")
+    if fmt == "zip" and not out_norm.lower().endswith(".zip"):
+        out_norm += ".zip"
+    elif fmt in ("tar.gz", "tgz") and not out_norm.lower().endswith((".tar.gz", ".tgz")):
+        out_norm += ".tar.gz"
+    elif fmt == "tar" and not out_norm.lower().endswith(".tar"):
+        out_norm += ".tar"
+
+    out_parent = safe_norm_path(os.path.dirname(out_norm))
+    out_filename = Path(out_norm).name
+    try:
+        _validate_segment_security(out_filename, out_norm)
+        if os.path.lexists(out_parent):
+            _ensure_no_reparse_in_base_dir(out_parent)
+    except Exception as exc:
+        return False, f"압축 대상 경로 오류: {exc}", 0
+
+    existing_archive = _find_case_insensitive_existing(out_parent, out_filename)
+    if existing_archive is not None or os.path.lexists(out_norm):
+        target_disp = existing_archive or out_norm
+        if not overwrite:
+            return (
+                False,
+                f"기존 아카이브 보호(덮어쓰기 금지): 대상 경로에 이미 '{target_disp}' 파일/폴더가 존재합니다.",
+                0,
+            )
+        if os.path.isdir(target_disp) or is_symlink_or_reparse_point(target_disp):
+            return False, f"압축 오류: 대상 경로('{target_disp}')가 폴더이거나 링크여서 덮어쓸 수 없습니다.", 0
+
+    os.makedirs(out_parent, exist_ok=True)
+    fd, tmp_archive = tempfile.mkstemp(prefix=".qdir_arc_stage_", suffix=".tmp", dir=out_parent)
+    os.close(fd)
+    item_count = 0
+
+    try:
+        if fmt == "zip":
+            with zipfile.ZipFile(tmp_archive, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+                for src in valid_srcs:
+                    src_p = Path(src)
+                    base_name = src_p.name
+                    if src_p.is_file():
+                        zf.write(src, arcname=base_name)
+                        item_count += 1
+                    elif src_p.is_dir():
+                        wrote_any = False
+                        for root, dirs, files in os.walk(src, followlinks=False):
+                            rel_root = os.path.relpath(root, src_p.parent).replace("\\", "/")
+                            if not dirs and not files:
+                                zinfo = zipfile.ZipInfo(rel_root.rstrip("/") + "/")
+                                zinfo.external_attr = (stat.S_IFDIR | 0o755) << 16
+                                zinfo.flag_bits |= 0x800
+                                zf.writestr(zinfo, b"")
+                                item_count += 1
+                                wrote_any = True
+                            for f_name in files:
+                                full_f = os.path.join(root, f_name)
+                                if safe_norm_path(full_f).casefold() in (
+                                    out_norm.casefold(),
+                                    safe_norm_path(tmp_archive).casefold(),
+                                ):
+                                    continue
+                                arc_rel = os.path.relpath(full_f, src_p.parent).replace("\\", "/")
+                                zf.write(full_f, arcname=arc_rel)
+                                item_count += 1
+                                wrote_any = True
+                        if not wrote_any:
+                            zinfo = zipfile.ZipInfo(base_name.rstrip("/") + "/")
+                            zinfo.external_attr = (stat.S_IFDIR | 0o755) << 16
+                            zinfo.flag_bits |= 0x800
+                            zf.writestr(zinfo, b"")
+                            item_count += 1
+        else:
+            mode_w = "w:gz" if fmt in ("tar.gz", "tgz") else "w"
+            with tarfile.open(tmp_archive, mode_w) as tf:
+                for src in valid_srcs:
+                    src_p = Path(src)
+                    tf.add(src, arcname=src_p.name, recursive=True)
+                    item_count += 1
+
+        # 커밋 직전 기존 아카이브 존재 여부 재확인 (동시 충돌 방어, 기존 파일 삭제 절대 금지)
+        race_existing = _find_case_insensitive_existing(out_parent, out_filename)
+        if (race_existing is not None or os.path.lexists(out_norm)) and not overwrite:
+            try:
+                os.unlink(tmp_archive)
+            except Exception:
+                pass
+            return (
+                False,
+                f"기존 아카이브 보호(동시 충돌 차단): '{race_existing or out_norm}' 파일이 이미 존재하여 보존했습니다.",
+                0,
+            )
+
+        try:
+            _publish_file_no_overwrite(tmp_archive, out_norm)
+        except FileExistsError:
+            if os.path.lexists(tmp_archive):
+                try:
+                    os.unlink(tmp_archive)
+                except Exception:
+                    pass
+            return False, f"기존 아카이브 보호: '{out_norm}' 파일이 이미 존재합니다.", 0
+
+        return True, out_norm, item_count
+    except Exception as exc:
+        if os.path.exists(tmp_archive):
+            try:
+                os.unlink(tmp_archive)
+            except Exception:
+                pass
+        return False, f"압축 중 오류가 발생했습니다: {exc}", 0
+
+
+def _write_stream_exclusive(src_stream: Any, dst_path: str) -> None:
+    """스테이징 폴더 내부에 파일을 독점 생성(O_CREAT | O_EXCL) 모드로 안전하게 기록합니다."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    fd = os.open(dst_path, flags, 0o644)
+    try:
+        with os.fdopen(fd, "wb") as dst_f:
+            shutil.copyfileobj(src_stream, dst_f)
+    except Exception:
+        try:
+            os.unlink(dst_path)
+        except Exception:
+            pass
+        raise
+
+
+NodeIdentity = Tuple[int, int, int, int]
+CommittedRecord = Tuple[str, str, Optional[NodeIdentity]]
+
+
+def _supports_non_overwriting_rename() -> bool:
+    """현재 OS의 os.rename이 기존 대상 존재 시 덮어쓰지 않고 실패(FileExistsError)하는지 반환합니다."""
+    return os.name == "nt" or platform.system() == "Windows"
+
+
+if os.name == "nt":
+    from ctypes import wintypes as _wintypes
+
+    class _WIN32_FILETIME(ctypes.Structure):
+        _fields_ = [("dwLowDateTime", _wintypes.DWORD), ("dwHighDateTime", _wintypes.DWORD)]
+
+    class _BY_HANDLE_FILE_INFORMATION(ctypes.Structure):
+        _fields_ = [
+            ("dwFileAttributes", _wintypes.DWORD),
+            ("ftCreationTime", _WIN32_FILETIME),
+            ("ftLastAccessTime", _WIN32_FILETIME),
+            ("ftLastWriteTime", _WIN32_FILETIME),
+            ("dwVolumeSerialNumber", _wintypes.DWORD),
+            ("nFileSizeHigh", _wintypes.DWORD),
+            ("nFileSizeLow", _wintypes.DWORD),
+            ("nNumberOfLinks", _wintypes.DWORD),
+            ("nFileIndexHigh", _wintypes.DWORD),
+            ("nFileIndexLow", _wintypes.DWORD),
+        ]
+
+    class _FILE_DISPOSITION_INFO(ctypes.Structure):
+        _fields_ = [("DeleteFile", _wintypes.BOOLEAN)]
+
+    class _FILE_DISPOSITION_INFO_EX(ctypes.Structure):
+        _fields_ = [("Flags", _wintypes.DWORD)]
+
+    _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _k32.CreateFileW.argtypes = [
+        _wintypes.LPCWSTR, _wintypes.DWORD, _wintypes.DWORD, _wintypes.LPVOID,
+        _wintypes.DWORD, _wintypes.DWORD, _wintypes.HANDLE,
+    ]
+    _k32.CreateFileW.restype = _wintypes.HANDLE
+    _k32.GetFileInformationByHandle.argtypes = [
+        _wintypes.HANDLE, ctypes.POINTER(_BY_HANDLE_FILE_INFORMATION),
+    ]
+    _k32.GetFileInformationByHandle.restype = _wintypes.BOOL
+    _k32.SetFileInformationByHandle.argtypes = [
+        _wintypes.HANDLE, ctypes.c_int, _wintypes.LPVOID, _wintypes.DWORD,
+    ]
+    _k32.SetFileInformationByHandle.restype = _wintypes.BOOL
+    _k32.CloseHandle.argtypes = [_wintypes.HANDLE]
+    _k32.CloseHandle.restype = _wintypes.BOOL
+    _INVALID_HANDLE_VALUES = (None, 0, -1, ctypes.c_void_p(-1).value)
+
+
+def _stat_identity(path_str: str) -> Optional[NodeIdentity]:
+    """파일/폴더의 (st_dev, st_ino, st_size, st_mtime_ns) 고유 식별자를 핸들/lstat으로 반환합니다."""
+    if os.name == "nt":
+        try:
+            # FILE_READ_ATTRIBUTES(0x80), SHARE_ALL(0x7), OPEN_EXISTING(3), OPEN_REPARSE|BACKUP_SEMANTICS(0x02200000)
+            h = _k32.CreateFileW(path_str, 0x0080, 0x07, None, 3, 0x02200000, None)
+            if h not in _INVALID_HANDLE_VALUES:
+                try:
+                    info = _BY_HANDLE_FILE_INFORMATION()
+                    if _k32.GetFileInformationByHandle(h, ctypes.byref(info)):
+                        if info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT:
+                            return None
+                        vol = int(info.dwVolumeSerialNumber)
+                        ino = (int(info.nFileIndexHigh) << 32) | int(info.nFileIndexLow)
+                        sz = (int(info.nFileSizeHigh) << 32) | int(info.nFileSizeLow)
+                        mt = (int(info.ftLastWriteTime.dwHighDateTime) << 32) | int(info.ftLastWriteTime.dwLowDateTime)
+                        return (vol, ino, sz, mt)
+                finally:
+                    _k32.CloseHandle(h)
+        except Exception:
+            pass
+    try:
+        st = os.lstat(path_str)
+        if stat.S_ISLNK(st.st_mode) or (getattr(st, "st_file_attributes", 0) & FILE_ATTRIBUTE_REPARSE_POINT):
+            return None
+        mtime_ns = int(getattr(st, "st_mtime_ns", int(st.st_mtime * 1_000_000_000)))
+        return (int(st.st_dev), int(st.st_ino), int(st.st_size), mtime_ns)
+    except OSError:
+        return None
+
+
+def _same_identity(
+    id_a: Optional[NodeIdentity],
+    id_b: Optional[NodeIdentity],
+    is_dir: bool = False,
+) -> bool:
+    """두 파일/디렉터리 식별자가 동일한 커널 객체인지 판별합니다."""
+    if id_a is None or id_b is None:
+        return False
+    if id_a[1] != 0 and id_b[1] != 0:
+        if is_dir:
+            return (id_a[0], id_a[1]) == (id_b[0], id_b[1])
+        return id_a == id_b
+    return id_a == id_b
+
+
+def _delete_by_verified_handle(
+    path_str: str,
+    expected_id: Optional[NodeIdentity],
+    is_dir: bool = False,
+) -> bool:
+    """
+    검사 후 이름만으로 삭제(lstat -> unlink/rmdir)하는 TOCTOU 경합을 제거하기 위해:
+    - Windows: DELETE 권한과 FILE_FLAG_OPEN_REPARSE_POINT로 커널 핸들을 연 뒤,
+      그 열린 핸들에서 직접 GetFileInformationByHandle로 게시 전 스테이징 ID(expected_id)와 일치하는지 검증하고,
+      일치할 때만 SetFileInformationByHandle(FileDispositionInfoEx/FileDispositionInfo)로 열린 핸들 자체를 삭제합니다.
+    - POSIX: O_NOFOLLOW로 파일 디스크립터를 먼저 열어 fstat이 expected_id와 일치하는지 검증한 뒤 삭제합니다.
+    """
+    if not path_str or expected_id is None:
+        return False
+
+    if os.name == "nt":
+        try:
+            # DELETE(0x00010000) | FILE_READ_ATTRIBUTES(0x0080) = 0x00010080
+            h = _k32.CreateFileW(path_str, 0x00010080, 0x07, None, 3, 0x02200000, None)
+            if h in _INVALID_HANDLE_VALUES:
+                return False
+            try:
+                info = _BY_HANDLE_FILE_INFORMATION()
+                if not _k32.GetFileInformationByHandle(h, ctypes.byref(info)):
+                    return False
+                if info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT:
+                    return False
+                actual_is_dir = bool(info.dwFileAttributes & 0x0010)
+                if actual_is_dir != is_dir:
+                    return False
+                curr_id: NodeIdentity = (
+                    int(info.dwVolumeSerialNumber),
+                    (int(info.nFileIndexHigh) << 32) | int(info.nFileIndexLow),
+                    (int(info.nFileSizeHigh) << 32) | int(info.nFileSizeLow),
+                    (int(info.ftLastWriteTime.dwHighDateTime) << 32) | int(info.ftLastWriteTime.dwLowDateTime),
+                )
+                if not _same_identity(curr_id, expected_id, is_dir=is_dir):
+                    return False
+                # FileDispositionInfoEx (Class=21, DELETE|POSIX_SEMANTICS=0x3) 우선 시도 후 FileDispositionInfo(Class=4) 폴백
+                disp_ex = _FILE_DISPOSITION_INFO_EX(0x00000003)
+                if _k32.SetFileInformationByHandle(h, 21, ctypes.byref(disp_ex), ctypes.sizeof(disp_ex)):
+                    return True
+                disp_std = _FILE_DISPOSITION_INFO(1)
+                if _k32.SetFileInformationByHandle(h, 4, ctypes.byref(disp_std), ctypes.sizeof(disp_std)):
+                    return True
+                return False
+            finally:
+                _k32.CloseHandle(h)
+        except Exception:
+            return False
+
+    # POSIX: O_NOFOLLOW로 fd를 먼저 열어 fstat으로 게시 전 스테이징 ID 검증
+    fd = -1
+    try:
+        open_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        if is_dir and hasattr(os, "O_DIRECTORY"):
+            open_flags |= os.O_DIRECTORY
+        fd = os.open(path_str, open_flags)
+        st_fd = os.fstat(fd)
+        if stat.S_ISLNK(st_fd.st_mode) or (stat.S_ISDIR(st_fd.st_mode) != is_dir):
+            return False
+        curr_fd_id: NodeIdentity = (
+            int(st_fd.st_dev),
+            int(st_fd.st_ino),
+            int(st_fd.st_size),
+            int(getattr(st_fd, "st_mtime_ns", int(st_fd.st_mtime * 1_000_000_000))),
+        )
+        if not _same_identity(curr_fd_id, expected_id, is_dir=is_dir):
+            return False
+        st_path = os.lstat(path_str)
+        if (int(st_path.st_dev), int(st_path.st_ino)) != (curr_fd_id[0], curr_fd_id[1]):
+            return False
+        fd_recheck = os.open(path_str, open_flags)
+        try:
+            st_fd2 = os.fstat(fd_recheck)
+            if (int(st_fd2.st_dev), int(st_fd2.st_ino)) != (curr_fd_id[0], curr_fd_id[1]):
+                return False
+        finally:
+            os.close(fd_recheck)
+        if is_dir:
+            os.rmdir(path_str)
+        else:
+            os.unlink(path_str)
+        return True
+    except OSError:
+        return False
+    finally:
+        if fd >= 0:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
+def _safe_unlink_if_same_file(path_str: str, expected_id: Optional[NodeIdentity]) -> bool:
+    """게시 전 스테이징 ID(expected_id)가 열린 핸들의 파일과 일치할 때만 안전하게 제거합니다."""
+    return _delete_by_verified_handle(path_str, expected_id, is_dir=False)
+
+
+def _safe_rmdir_if_same_dir(path_str: str, expected_id: Optional[NodeIdentity]) -> bool:
+    """게시 전 스테이징 ID(expected_id)가 열린 핸들의 빈 폴더와 일치할 때만 안전하게 제거합니다."""
+    return _delete_by_verified_handle(path_str, expected_id, is_dir=True)
+
+
+def _publish_file_no_overwrite(src_file: str, dst_file: str) -> NodeIdentity:
+    """
+    overwrite=False 전용 파일 게시 함수 (os.replace 및 게시 후 대상 ID 재조회 절대 금지):
+    - 항상 게시 전 스테이징 파일의 고유 식별자(src_id)만 반환하여, 게시 직후 다른 작성자가
+      같은 이름의 파일을 삭제·교체하더라도 다른 작성자의 파일 ID가 우리 소유로 기록되지 않게 보장합니다.
+    """
+    parent_dir = os.path.dirname(dst_file)
+    base_name = os.path.basename(dst_file)
+    existing_ci = _find_case_insensitive_existing(parent_dir, base_name)
+    if existing_ci is not None or os.path.lexists(dst_file):
+        raise FileExistsError(f"기존 파일 보호(동시 충돌 차단): '{existing_ci or dst_file}' 항목이 이미 존재합니다.")
+
+    # 반드시 게시(link/rename) 전에 스테이징 원본에서 식별자를 확보하고 이를 그대로 반환
+    src_id = _stat_identity(src_file)
+    if src_id is None:
+        raise FileNotFoundError(f"스테이징 원본 파일을 찾을 수 없습니다: {src_file}")
+
+    linked = False
+    link_exc: Optional[OSError] = None
+    try:
+        os.link(src_file, dst_file)
+        linked = True
+    except FileExistsError as exc:
+        raise FileExistsError(f"기존 파일 보호(동시 충돌 차단): '{dst_file}' 파일이 이미 존재합니다.") from exc
+    except OSError as exc:
+        link_exc = exc
+
+    if linked:
+        try:
+            os.unlink(src_file)
+        except OSError as unlink_exc:
+            _safe_unlink_if_same_file(dst_file, src_id)
+            raise RuntimeError(
+                f"스테이징 파일 정리(unlink) 실패로 게시를 중단하고 롤백했습니다: {unlink_exc}"
+            ) from unlink_exc
+        return src_id
+
+    if not _supports_non_overwriting_rename():
+        raise RuntimeError(
+            f"하드링크를 지원하지 않으며 비덮어쓰기 rename을 보장할 수 없어 게시를 중단합니다: {link_exc}"
+        ) from link_exc
+
+    existing_ci = _find_case_insensitive_existing(parent_dir, base_name)
+    if existing_ci is not None or os.path.lexists(dst_file):
+        raise FileExistsError(f"기존 파일 보호(동시 충돌 차단): '{existing_ci or dst_file}' 파일이 이미 존재합니다.")
+
+    os.rename(src_file, dst_file)
+    return src_id
+
+
+def _snapshot_tree_records(src_dir: str, dst_dir: str) -> List[CommittedRecord]:
+    """디렉터리 rename 전에 스테이징 내부 디렉터리/파일의 고유 식별자(prev_id)와 목표 경로를 기록합니다."""
+    records: List[CommittedRecord] = []
+    root_id = _stat_identity(src_dir)
+    if root_id is None:
+        raise FileNotFoundError(f"스테이징 디렉터리를 찾을 수 없습니다: {src_dir}")
+    records.append(("dir", dst_dir, root_id))
+    for cur_root, dirs, files in os.walk(src_dir, topdown=True, followlinks=False):
+        rel_root = os.path.relpath(cur_root, src_dir)
+        target_cur = dst_dir if rel_root == "." else os.path.join(dst_dir, rel_root)
+        for d_name in dirs:
+            s_d = os.path.join(cur_root, d_name)
+            t_d = os.path.join(target_cur, d_name)
+            records.append(("dir", t_d, _stat_identity(s_d)))
+        for f_name in files:
+            s_f = os.path.join(cur_root, f_name)
+            t_f = os.path.join(target_cur, f_name)
+            records.append(("file", t_f, _stat_identity(s_f)))
+    return records
+
+
+def _publish_dir_no_overwrite(
+    src_dir: str,
+    dst_dir: str,
+    committed_records: List[CommittedRecord],
+) -> None:
+    """
+    overwrite=False 전용 새 폴더 게시 함수 (os.replace, 공유 폴더 병합, 게시 후 대상 ID 재조회 절대 금지):
+    - 게시 전 스테이징 트리에서 확보한 식별자(pre_records)만 기록하며, 게시 후 대상 경로에서 ID를 다시 읽지 않습니다.
+    """
+    parent_dir = os.path.dirname(dst_dir)
+    base_name = os.path.basename(dst_dir)
+    existing_ci = _find_case_insensitive_existing(parent_dir, base_name)
+    if existing_ci is not None or os.path.lexists(dst_dir):
+        raise FileExistsError(
+            f"기존 폴더/파일 보호(공유 폴더 병합 금지): '{existing_ci or dst_dir}' 항목이 이미 존재합니다."
+        )
+
+    if _supports_non_overwriting_rename():
+        pre_records = _snapshot_tree_records(src_dir, dst_dir)
+        os.rename(src_dir, dst_dir)
+        committed_records.extend(pre_records)
+        return
+
+    # 비Windows(POSIX): os.mkdir 독점 생성 직후 O_NOFOLLOW fd로 디렉터리 ID 확보
+    os.mkdir(dst_dir, 0o755)
+    committed_records.append(("dir", dst_dir, _stat_identity(dst_dir)))
+    for entry_name in sorted(os.listdir(src_dir)):
+        s_child = os.path.join(src_dir, entry_name)
+        d_child = os.path.join(dst_dir, entry_name)
+        if os.path.isdir(s_child) and not is_symlink_or_reparse_point(s_child):
+            _publish_dir_no_overwrite(s_child, d_child, committed_records)
+        else:
+            f_id = _publish_file_no_overwrite(s_child, d_child)
+            committed_records.append(("file", d_child, f_id))
+
+
+def _rollback_committed_records(committed_records: List[CommittedRecord]) -> None:
+    """
+    트랜잭션 롤백: 게시 전 스테이징에서 기록한 고유 식별자(rec_id)를 열린 핸들에서 직접 검증하여
+    일치하는 파일과 빈 디렉터리만 핸들 기반으로 제거합니다(경로 이름 기반 삭제 경합 원천 차단).
+    """
+    for kind, abs_p, rec_id in reversed(committed_records):
+        if kind == "file":
+            _safe_unlink_if_same_file(abs_p, rec_id)
+
+    dir_records = [r for r in committed_records if r[0] == "dir"]
+    dir_records.sort(key=lambda r: len(Path(r[1]).parts), reverse=True)
+    for _, abs_d, rec_id in dir_records:
+        _safe_rmdir_if_same_dir(abs_d, rec_id)
+
+
+def extract_archive_smart(
+    archive_path: str,
+    dest_dir: str,
+    create_subfolder: bool = False,
+    overwrite: bool = False,
+    atomic_subfolder_only: bool = False,
+) -> Tuple[bool, str, int]:
+    """
+    .zip, .tar, .tar.gz, .tgz, .tar.bz2, .tar.xz 압축 파일을 안전하게 해제합니다.
+    [v3.1 핵심 보안·무결성 정책]
+    1. 첫 쓰기 전 전수 검사(`inspect_archive_entries`):
+       - `..`, 드라이브 문자, 절대/루트 경로, UNC, NTFS ADS(`:`), 예약 파일명, 끝 공백/점,
+         심볼릭/하드 링크·Junction/Reparse, 대소문자 중복 및 대상 기존 파일/폴더 충돌을 사전 차단합니다.
+       - 외부 추출기(`7z`, `tar`) CLI 폴백은 검증 우회 방지를 위해 비활성화되었습니다.
+    2. 기본 덮어쓰기 금지(`overwrite=False`) 및 전용 임시 스테이징 폴더 추출 후 원자적 반영:
+       - 먼저 전용 스테이징 폴더에 전체 항목을 풀고 검증한 뒤 대상 폴더에 반영합니다.
+       - 추출 실패나 동시 충돌 시 기존 대상 파일(`existing.txt`)은 100% 보존되며 부분 반입 파일이 남지 않습니다.
+    반환값: (성공 여부, 압축 해제된 대상 폴더 경로 또는 오류 메시지, 해제된 파일 수)
+    """
+    if overwrite:
+        return False, "압축 해제 실패: 보안 정책상 기존 파일 덮어쓰기(overwrite=True) 경로는 제공하지 않습니다.", 0
+    arc_norm = safe_norm_path(archive_path)
+    if not os.path.isfile(arc_norm):
+        return False, f"압축 파일을 찾을 수 없습니다: {arc_norm}", 0
+
+    dest_base = safe_norm_path(dest_dir)
+    if not dest_base:
+        return False, "대상 폴더 경로가 비어 있습니다.", 0
+
+    try:
+        _ensure_no_reparse_in_base_dir(dest_base)
+    except Exception as exc:
+        return False, f"압축 해제 실패: {exc}", 0
+
+    if create_subfolder:
+        sub_name = strip_archive_stem(arc_norm).rstrip(" .") or "extracted"
+        try:
+            _validate_segment_security(sub_name, sub_name)
+        except Exception as exc:
+            return False, f"압축 해제 실패: {exc}", 0
+        existing_sub = _find_case_insensitive_existing(dest_base, sub_name)
+        if existing_sub is not None:
+            if is_symlink_or_reparse_point(existing_sub):
+                return (
+                    False,
+                    f"압축 해제 실패: 보안 차단 - 대상 하위 경로가 링크/Junction입니다 ({existing_sub})",
+                    0,
+                )
+            if not overwrite:
+                return (
+                    False,
+                    f"압축 해제 실패: 기존 폴더/파일 보호(덮어쓰기 금지) - '{existing_sub}' 항목이 이미 존재합니다.",
+                    0,
+                )
+        target_root = safe_norm_path(os.path.join(dest_base, sub_name))
+    else:
+        target_root = dest_base
+
+    # 1단계: 첫 쓰기 전 전수 검사 (이 단계에서는 디스크에 어떠한 폴더나 파일도 쓰지 않음)
+    try:
+        archive_kind, plan = inspect_archive_entries(arc_norm, target_root, overwrite=overwrite)
+    except Exception as exc:
+        return False, f"압축 해제 실패: {exc}", 0
+
+    # 2단계: 전용 임시 스테이징 디렉터리에 전체 추출 및 무결성 검증
+    stage_parent_base = dest_base if os.path.isdir(dest_base) else os.path.dirname(dest_base)
+    try:
+        os.makedirs(stage_parent_base, exist_ok=True)
+        _ensure_no_reparse_in_base_dir(stage_parent_base)
+    except Exception as exc:
+        return False, f"압축 해제 실패: {exc}", 0
+
+    staging_dir = tempfile.mkdtemp(prefix=".qdir_extract_stage_", dir=stage_parent_base)
+    extracted_count = 0
+
+    try:
+        if archive_kind == "zip":
+            with zipfile.ZipFile(arc_norm, "r") as zf:
+                for item in plan:
+                    segs: List[str] = item["segments"]
+                    stage_target = safe_norm_path(os.path.join(staging_dir, *segs))
+                    if os.path.commonpath([staging_dir, stage_target]).casefold() != staging_dir.casefold():
+                        raise PermissionError(f"보안 차단: 스테이징 경로 이탈 감지 ({item['raw_name']})")
+                    if item["is_dir"]:
+                        os.makedirs(stage_target, exist_ok=True)
+                        continue
+                    os.makedirs(os.path.dirname(stage_target), exist_ok=True)
+                    zinfo: zipfile.ZipInfo = item["zip_info"]
+                    with zf.open(zinfo, "r") as src_f:
+                        _write_stream_exclusive(src_f, stage_target)
+                    extracted_count += 1
+        elif archive_kind == "tar":
+            with tarfile.open(arc_norm, "r:*") as tf:
+                members = tf.getmembers()
+                for item in plan:
+                    segs = item["segments"]
+                    stage_target = safe_norm_path(os.path.join(staging_dir, *segs))
+                    if os.path.commonpath([staging_dir, stage_target]).casefold() != staging_dir.casefold():
+                        raise PermissionError(f"보안 차단: 스테이징 경로 이탈 감지 ({item['raw_name']})")
+                    if item["is_dir"]:
+                        os.makedirs(stage_target, exist_ok=True)
+                        continue
+                    os.makedirs(os.path.dirname(stage_target), exist_ok=True)
+                    member = members[int(item["index"])]
+                    src_f = tf.extractfile(member)
+                    if src_f is None:
+                        raise IOError(f"TAR 항목 스트림을 읽을 수 없습니다: {item['raw_name']}")
+                    with src_f:
+                        _write_stream_exclusive(src_f, stage_target)
+                    extracted_count += 1
+
+        # 스테이징 트리 전체에 링크/Junction이 없는지 사후 검증
+        _assert_tree_contains_no_reparse_or_links(staging_dir)
+
+        # 3단계: 원자적/트랜잭션 반영 (동시 충돌 시 100% 롤백)
+        _ensure_no_reparse_in_base_dir(dest_base)
+
+        committed_records: List[CommittedRecord] = []
+        if create_subfolder or not os.path.lexists(target_root):
+            parent_of_target = os.path.dirname(target_root)
+            os.makedirs(parent_of_target, exist_ok=True)
+            _ensure_no_reparse_in_base_dir(parent_of_target)
+            try:
+                _publish_dir_no_overwrite(staging_dir, target_root, committed_records)
+            except Exception:
+                _rollback_committed_records(committed_records)
+                raise
+            return True, target_root, extracted_count
+
+        if atomic_subfolder_only and not overwrite:
+            raise FileExistsError(
+                f"원자적 전용 새 폴더 게시 모드: 대상 폴더('{target_root}')가 이미 존재하여 공유 폴더 반입을 거부합니다."
+            )
+        if not os.path.isdir(target_root) or is_symlink_or_reparse_point(target_root):
+            raise PermissionError(f"보안/충돌 차단: 대상 경로가 유효한 일반 폴더가 아닙니다 ({target_root})")
+        _ensure_no_reparse_in_base_dir(target_root)
+
+        top_names = sorted(os.listdir(staging_dir))
+        # 커밋 직전 모든 최상위 항목에 대해 동시 충돌 및 링크 재검사
+        for top_name in top_names:
+            existing_top = _find_case_insensitive_existing(target_root, top_name)
+            if existing_top is not None:
+                if is_symlink_or_reparse_point(existing_top):
+                    raise PermissionError(
+                        f"보안 차단: 대상 경로에 링크/Junction이 감지되었습니다 ({existing_top})"
+                    )
+                if not overwrite:
+                    raise FileExistsError(
+                        f"기존 파일/폴더 보호(동시 충돌 및 공유 폴더 병합 차단): '{existing_top}' 항목이 이미 존재합니다."
+                    )
+
+        try:
+            for top_name in top_names:
+                src_top = os.path.join(staging_dir, top_name)
+                dst_top = os.path.join(target_root, top_name)
+                existing_top = _find_case_insensitive_existing(target_root, top_name)
+                if existing_top is not None and not overwrite:
+                    raise FileExistsError(
+                        f"기존 파일/폴더 보호(동시 충돌 및 공유 폴더 병합 차단): '{existing_top}' 항목이 이미 존재합니다."
+                    )
+                if os.path.isdir(src_top) and not is_symlink_or_reparse_point(src_top):
+                    _publish_dir_no_overwrite(src_top, dst_top, committed_records)
+                else:
+                    f_id = _publish_file_no_overwrite(src_top, dst_top)
+                    committed_records.append(("file", dst_top, f_id))
+        except Exception:
+            _rollback_committed_records(committed_records)
+            raise
+
+        return True, target_root, extracted_count
+    except Exception as exc:
+        return False, f"압축 해제 실패: {exc}", 0
+    finally:
+        if os.path.exists(staging_dir):
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
+
+def elide_middle_smart(text: str, max_visual_cols: int = 20) -> str:
+    """한글(폭 2)과 영문/숫자(폭 1)의 시각적 폭을 계산해 확장자를 보존하며 가운데 말줄임을 수행합니다."""
+    def _vlen(s: str) -> int:
+        return sum(2 if ord(ch) > 127 else 1 for ch in s)
+
+    if _vlen(text) <= max_visual_cols:
+        return text
+    keep_tail = min(6, max(3, len(text) // 3))
+    tail = text[-keep_tail:]
+    target_head = max(4, max_visual_cols - _vlen(tail) - 2)
+    head_chars: List[str] = []
+    acc = 0
+    for ch in text:
+        w = 2 if ord(ch) > 127 else 1
+        if acc + w > target_head:
+            break
+        head_chars.append(ch)
+        acc += w
+    return f"{''.join(head_chars)}…{tail}"
+
+
 def safe_norm_path(path_str: str) -> str:
     """
     Google Drive(G:) 등 가상 드라이브에서 `Path.resolve()` 호출 시 발생하는
@@ -176,8 +1353,8 @@ def safe_norm_path(path_str: str) -> str:
 def normalize_user_input_path(raw_input: str) -> str:
     """
     사용자가 주소창에 입력한 문자열을 실제 로컬/가상 드라이브 경로로 변환합니다.
-    - `file:///G:/%EB%82%B4%20%EB%93%9C%EB%9D%BC%EC%9D%B4%EB%B8%8C/.../400.html` 지원
-    - `G:/내%20드라이브/02.%20Knowledge/.../400.html` 지원
+    - `file:///C:/workspace/docs/%EB%AC%B8%EC%84%9C/index.html` 지원
+    - `C:/workspace/%EB%AC%B8%EC%84%9C/report.html` 지원
     """
     s = raw_input.strip().strip('"').strip("'")
     if not s:
@@ -640,11 +1817,19 @@ def safe_delete_path(target_path: str) -> Tuple[bool, str]:
 def copy_to_local_temp_cache(file_path: str, override_ext: Optional[str] = None) -> str:
     """
     가상 드라이브(G:)에서 직접 열 때 발생하는 파일 잠금/스트리밍 오류나 확장자 불일치를 우회하기 위해
-    로컬 `%TEMP%\\PyQuadDir_OpenCache` 폴더로 사본을 복사한 뒤 그 경로를 반환합니다.
+    로컬 `%TEMP%\\QDir_OpenCache` 폴더로 사본을 복사한 뒤 그 경로를 반환합니다.
     """
     norm_p = safe_norm_path(file_path)
     p = Path(norm_p)
-    cache_dir = Path(tempfile.gettempdir()) / "PyQuadDir_OpenCache"
+    cache_dir = (
+        (_ACTIVE_PROFILE_DIR / "QDir_OpenCache")
+        if _ACTIVE_PROFILE_DIR is not None
+        else (
+            Path(safe_norm_path(os.environ["QDIR_PROFILE_DIR"])) / "QDir_OpenCache"
+            if os.environ.get("QDIR_PROFILE_DIR", "").strip()
+            else Path(tempfile.gettempdir()) / "QDir_OpenCache"
+        )
+    )
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     target_name = f"{p.stem}{override_ext}" if override_ext else p.name
@@ -689,24 +1874,75 @@ def open_path_with_os(target_path: str, use_local_cache_for_virtual: bool = Fals
         subprocess.Popen(["xdg-open", norm_p])
 
 
+_ACTIVE_PROFILE_DIR: Optional[Path] = None
+_ACTIVE_CONFIG_PATH: Optional[Path] = None
+
+
+def set_active_profile(
+    profile_dir: Optional[str] = None,
+    config_path: Optional[str] = None,
+) -> None:
+    """
+    테스트 전용 프로필 폴더(`--profile-dir` / `QDIR_PROFILE_DIR`) 또는 단일 설정 파일(`--config` / `QDIR_CONFIG_PATH`)을
+    활성화합니다. 지정된 경우 사용자 홈(`~`)이나 실행 파일 인접(`.qdir_session.json`)을 절대 읽거나 쓰지 않습니다.
+    """
+    global _ACTIVE_PROFILE_DIR, _ACTIVE_CONFIG_PATH
+    _ACTIVE_CONFIG_PATH = Path(safe_norm_path(config_path)) if config_path else None
+    _ACTIVE_PROFILE_DIR = Path(safe_norm_path(profile_dir)) if profile_dir else None
+
+
+def is_isolated_profile_active() -> bool:
+    """현재 테스트 전용 격리 프로필 또는 지정 설정 파일 모드가 활성화되어 있는지 반환합니다."""
+    return bool(
+        _ACTIVE_CONFIG_PATH is not None
+        or _ACTIVE_PROFILE_DIR is not None
+        or os.environ.get("QDIR_CONFIG_PATH", "").strip()
+        or os.environ.get("QDIR_PROFILE_DIR", "").strip()
+    )
+
+
 def get_config_candidate_paths() -> List[Path]:
-    """실행 파일(.exe 또는 .py) 옆의 세션 파일과 사용자 홈 설정 파일 경로를 모두 반환합니다."""
+    """
+    설정/세션 후보 경로를 반환합니다.
+    - 격리 프로필(`--profile-dir` / `QDIR_PROFILE_DIR` / `--config` / `QDIR_CONFIG_PATH`)이 지정된 경우,
+      오직 해당 격리 경로만 반환하며 사용자 홈과 실행 파일 인접 설정은 절대 건드리지 않습니다.
+    """
+    if _ACTIVE_CONFIG_PATH is not None:
+        return [_ACTIVE_CONFIG_PATH]
+
+    env_cfg = os.environ.get("QDIR_CONFIG_PATH", "").strip()
+    if env_cfg:
+        return [Path(safe_norm_path(env_cfg))]
+
+    if _ACTIVE_PROFILE_DIR is not None:
+        return [
+            _ACTIVE_PROFILE_DIR / ".qdir_session.json",
+            _ACTIVE_PROFILE_DIR / ".qdir_py_config.json",
+        ]
+
+    env_prof = os.environ.get("QDIR_PROFILE_DIR", "").strip()
+    if env_prof:
+        prof_p = Path(safe_norm_path(env_prof))
+        return [
+            prof_p / ".qdir_session.json",
+            prof_p / ".qdir_py_config.json",
+        ]
+
     paths: List[Path] = []
     try:
         if getattr(sys, "frozen", False):
             exe_dir = Path(os.path.dirname(os.path.abspath(sys.executable)))
         else:
             exe_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-        paths.append(exe_dir / ".pyquaddir_session.json")
-        legacy_sess = exe_dir / ".qdir_session.json"
-        if legacy_sess.exists():
-            paths.append(legacy_sess)
+        for name in (".pyquaddir_session.json", ".qdir_session.json"):
+            cand = exe_dir / name
+            if cand not in paths:
+                paths.append(cand)
     except Exception:
         pass
-    if CONFIG_PATH not in paths:
-        paths.append(CONFIG_PATH)
-    if LEGACY_CONFIG_PATH.exists() and LEGACY_CONFIG_PATH not in paths:
-        paths.append(LEGACY_CONFIG_PATH)
+    for home_cand in (Path.home() / ".pyquaddir_config.json", CONFIG_PATH):
+        if home_cand not in paths:
+            paths.append(home_cand)
     return paths
 
 
@@ -715,7 +1951,6 @@ def load_app_config() -> Dict[str, object]:
     candidates = [p for p in get_config_candidate_paths() if p.exists()]
     if not candidates:
         return {}
-    # 수정 시각이 가장 최신인 설정 파일을 우선 로드
     candidates.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0.0, reverse=True)
     for c_path in candidates:
         try:
@@ -727,12 +1962,94 @@ def load_app_config() -> Dict[str, object]:
     return {}
 
 
-def save_app_config(data: Dict[str, object]) -> None:
-    """종료 후 재실행 시 언제든 복원되도록 홈 폴더와 실행 폴더에 설정을 저장합니다."""
-    payload = json.dumps(data, ensure_ascii=False, indent=2)
-    for c_path in get_config_candidate_paths():
+def merge_engine_config(
+    existing: Dict[str, object],
+    new_data: Dict[str, object],
+    engine: str = "qt",
+) -> Dict[str, object]:
+    """
+    Qt와 Tk 엔진 전환 시에도 기존 보기·창·탭·즐겨찾기·색상 규칙 설정이 절대 유실되지 않도록
+    기존 설정과 새 설정을 비파괴적으로 병합하고 엔진별 스냅샷(`engines.qt`, `engines.tk`)을 함께 유지합니다.
+    """
+    merged: Dict[str, object] = json.loads(json.dumps(existing)) if isinstance(existing, dict) else {}
+    qt_only_keys = (
+        "default_view_mode",
+        "show_icons",
+        "show_file_extensions",
+        "show_hidden_files",
+        "pane_tab_view_modes",
+        "window_geometry",
+    )
+
+    for k, v in new_data.items():
+        if k in ("favorites", "color_rules") and not v and merged.get(k):
+            continue
+        merged[k] = v
+
+    # Tk에서 저장할 때 Qt 전용 키가 누락되어 있으면 기존 값을 보존하고 탭별 보기 모드를 탭 수에 맞춰 동기화
+    if engine == "tk":
+        for qk in qt_only_keys:
+            if qk not in new_data and qk in existing:
+                merged[qk] = existing[qk]
+        default_vm = str(merged.get("default_view_mode", "details"))
+        pane_tabs = merged.get("pane_tabs")
+        old_vms = existing.get("pane_tab_view_modes")
+        if isinstance(pane_tabs, list):
+            synced_vms: List[List[str]] = []
+            for p_i, t_list in enumerate(pane_tabs):
+                t_count = len(t_list) if isinstance(t_list, list) else 1
+                prev_p_vms = (
+                    old_vms[p_i]
+                    if isinstance(old_vms, list) and p_i < len(old_vms) and isinstance(old_vms[p_i], list)
+                    else []
+                )
+                row_vms = [
+                    str(prev_p_vms[t_i]) if t_i < len(prev_p_vms) else default_vm
+                    for t_i in range(t_count)
+                ]
+                synced_vms.append(row_vms)
+            merged["pane_tab_view_modes"] = synced_vms
+        # Tk에서 지원하지 않는 Qt 3분할 레이아웃(3_left, 3_top)이 기존 설정에 있었다면 qt_layout_mode에 보존
+        prev_layout = str(existing.get("layout_mode", ""))
+        if prev_layout in ("3_left", "3_top"):
+            merged["qt_preferred_layout"] = prev_layout
+
+    merged.setdefault("default_view_mode", "details")
+    merged.setdefault("show_icons", True)
+    merged.setdefault("show_file_extensions", True)
+    merged.setdefault("show_hidden_files", False)
+    merged.setdefault("window_geometry", [80, 60, 1520, 940, False])
+    merged["schema_version"] = "3.1"
+    merged["last_engine"] = engine
+
+    engines_map = merged.get("engines")
+    if not isinstance(engines_map, dict):
+        engines_map = {}
+    engines_map[engine] = json.loads(json.dumps(new_data))
+    merged["engines"] = engines_map
+    return merged
+
+
+def save_app_config(data: Dict[str, object], engine: str = "qt") -> None:
+    """
+    기존 설정과 병합하여 원자적(임시 파일 기록 후 교체)으로 설정을 저장합니다.
+    격리 프로필이 활성화된 경우 오직 격리 프로필 경로에만 기록합니다.
+    """
+    existing = load_app_config()
+    merged = merge_engine_config(existing, data, engine=engine)
+    payload = json.dumps(merged, ensure_ascii=False, indent=2)
+    all_cands = get_config_candidate_paths()
+    if is_isolated_profile_active():
+        target_cands = all_cands
+    else:
+        existing_cands = [p for p in all_cands if p.exists()]
+        target_cands = existing_cands if existing_cands else all_cands
+    for c_path in target_cands:
         try:
-            c_path.write_text(payload, encoding="utf-8")
+            c_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_p = c_path.with_name(f"{c_path.name}.tmp_{os.getpid()}")
+            tmp_p.write_text(payload, encoding="utf-8")
+            os.replace(str(tmp_p), str(c_path))
         except Exception:
             pass
 
@@ -923,193 +2240,124 @@ def get_initial_4_paths() -> List[str]:
 # ---------------------------------------------------------------------------
 # 엔진 선택 및 PyQt6 부트스트랩
 # ---------------------------------------------------------------------------
-def _detect_qt_binding() -> Optional[str]:
-    """설치된 Qt 바인딩(PySide6 또는 PyQt6)을 감지하여 반환합니다."""
-    if "--pyqt6" in sys.argv:
-        order = ("PyQt6", "PySide6")
-    else:
-        order = ("PySide6", "PyQt6")
-    for pkg in order:
-        try:
-            __import__(pkg)
-            return pkg
-        except ImportError:
-            continue
-    return None
-
-
 def _check_or_install_pyqt6() -> bool:
     if "--tk" in sys.argv:
         return False
     if getattr(sys, "frozen", False):
-        return _detect_qt_binding() is not None
-    if _detect_qt_binding() is not None:
+        try:
+            import PyQt6  # noqa: F401
+            return True
+        except ImportError:
+            return False
+    try:
+        import PyQt6  # noqa: F401
         return True
+    except ImportError:
+        if (
+            getattr(sys, "frozen", False)
+            or getattr(sys, "_qdir_self_test_gui", False)
+            or os.environ.get("QDIR_NO_AUTO_INSTALL")
+        ):
+            return False
 
     msg = (
-        "고해상도 썸네일 및 탐색기 기능을 지원하는 Qt 엔진(PySide6 / PyQt6)이 아직 설치되어 있지 않습니다.\n\n"
-        "• [예(Y)] 클릭: Qt 엔진을 자동 설치(pip install PySide6) 후 실행\n"
+        "고해상도 썸네일 및 탐색기 기능을 지원하는 'PyQt6' 엔진이 아직 설치되어 있지 않습니다.\n\n"
+        "• [예(Y)] 클릭: PyQt6를 자동 설치(pip install PyQt6) 후 실행\n"
         "• [아니오(N)] 클릭: 별도 설치 없이 내장 Tkinter 엔진으로 즉시 실행"
     )
     install = False
     if platform.system() == "Windows":
         try:
-            res = ctypes.windll.user32.MessageBoxW(0, msg, "PyQuadDir 실행 엔진 선택", 0x24)
+            res = ctypes.windll.user32.MessageBoxW(0, msg, "Q-Dir 실행 엔진 선택", 0x24)
             install = (res == 6)
         except Exception:
             install = False
     else:
         if sys.stdin and sys.stdin.isatty():
             print(msg)
-            ans = input("Qt 엔진(PySide6) 자동 설치 진행 [Y/n]: ").strip().lower()
+            ans = input("PyQt6 자동 설치 진행 [Y/n]: ").strip().lower()
             install = ans in ("", "y", "yes")
 
     if install:
-        for candidate_pkg in ("PySide6", "PyQt6"):
-            try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", candidate_pkg])
-                if _detect_qt_binding() is not None:
-                    return True
-            except Exception:
-                continue
-        print("Qt 엔진 설치 실패 -> 내장 Tkinter 엔진으로 구동합니다.")
-        return False
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "PyQt6"])
+            import PyQt6  # noqa: F401
+            return True
+        except Exception as exc:
+            print(f"PyQt6 설치 실패 ({exc}) -> 내장 Tkinter 엔진으로 구동합니다.")
+            return False
     return False
 
 
 # ===========================================================================
-# 1. Qt (PySide6 / PyQt6) 기반 메인 PyQuadDir 엔진
+# 1. PyQt6 기반 메인 Q-Dir 엔진
 # ===========================================================================
 def run_pyqt6_app() -> None:
-    binding = _detect_qt_binding()
-    if binding == "PySide6":
-        from PySide6.QtCore import (  # type: ignore
-            QFileInfo,
-            QItemSelection,
-            QItemSelectionModel,
-            QMimeData,
-            QPoint,
-            QPointF,
-            QRectF,
-            QSize,
-            QTimer,
-            Qt,
-            QUrl,
-            Signal as pyqtSignal,
-        )
-        from PySide6.QtGui import (  # type: ignore
-            QColor,
-            QDrag,
-            QFont,
-            QFontMetrics,
-            QIcon,
-            QImageReader,
-            QKeySequence,
-            QPainter,
-            QPen,
-            QPixmap,
-            QShortcut,
-        )
-        from PySide6.QtWidgets import (  # type: ignore
-            QAbstractItemView,
-            QApplication,
-            QCheckBox,
-            QColorDialog,
-            QDialog,
-            QDialogButtonBox,
-            QFileIconProvider,
-            QFormLayout,
-            QFrame,
-            QHBoxLayout,
-            QHeaderView,
-            QInputDialog,
-            QLabel,
-            QLineEdit,
-            QListView,
-            QListWidget,
-            QListWidgetItem,
-            QMainWindow,
-            QMenu,
-            QMessageBox,
-            QPlainTextEdit,
-            QPushButton,
-            QSizePolicy,
-            QSplitter,
-            QStackedWidget,
-            QStatusBar,
-            QTableWidget,
-            QTableWidgetItem,
-            QTabWidget,
-            QTextBrowser,
-            QToolBar,
-            QToolButton,
-            QVBoxLayout,
-            QWidget,
-        )
-    else:
-        from PyQt6.QtCore import (
-            QFileInfo,
-            QItemSelection,
-            QItemSelectionModel,
-            QMimeData,
-            QPoint,
-            QPointF,
-            QRectF,
-            QSize,
-            QTimer,
-            Qt,
-            QUrl,
-            pyqtSignal,
-        )
-        from PyQt6.QtGui import (
-            QColor,
-            QDrag,
-            QFont,
-            QFontMetrics,
-            QIcon,
-            QImageReader,
-            QKeySequence,
-            QPainter,
-            QPen,
-            QPixmap,
-            QShortcut,
-        )
-        from PyQt6.QtWidgets import (
-            QAbstractItemView,
-            QApplication,
-            QCheckBox,
-            QColorDialog,
-            QDialog,
-            QDialogButtonBox,
-            QFileIconProvider,
-            QFormLayout,
-            QFrame,
-            QHBoxLayout,
-            QHeaderView,
-            QInputDialog,
-            QLabel,
-            QLineEdit,
-            QListView,
-            QListWidget,
-            QListWidgetItem,
-            QMainWindow,
-            QMenu,
-            QMessageBox,
-            QPlainTextEdit,
-            QPushButton,
-            QSizePolicy,
-            QSplitter,
-            QStackedWidget,
-            QStatusBar,
-            QTableWidget,
-            QTableWidgetItem,
-            QTabWidget,
-            QTextBrowser,
-            QToolBar,
-            QToolButton,
-            QVBoxLayout,
-            QWidget,
-        )
+    from PyQt6.QtCore import (
+        QFileInfo,
+        QItemSelection,
+        QItemSelectionModel,
+        QMimeData,
+        QPoint,
+        QPointF,
+        QRect,
+        QRectF,
+        QSize,
+        QTimer,
+        Qt,
+        QUrl,
+        pyqtSignal,
+    )
+    from PyQt6.QtGui import (
+        QColor,
+        QDrag,
+        QFont,
+        QFontMetrics,
+        QIcon,
+        QImageReader,
+        QKeySequence,
+        QPainter,
+        QPen,
+        QPixmap,
+        QShortcut,
+    )
+    from PyQt6.QtWidgets import (
+        QAbstractItemView,
+        QApplication,
+        QCheckBox,
+        QColorDialog,
+        QDialog,
+        QDialogButtonBox,
+        QFileIconProvider,
+        QFormLayout,
+        QFrame,
+        QHBoxLayout,
+        QHeaderView,
+        QInputDialog,
+        QLabel,
+        QLineEdit,
+        QListView,
+        QListWidget,
+        QListWidgetItem,
+        QMainWindow,
+        QMenu,
+        QMessageBox,
+        QPlainTextEdit,
+        QPushButton,
+        QRubberBand,
+        QSizePolicy,
+        QSplitter,
+        QStackedWidget,
+        QStatusBar,
+        QTableWidget,
+        QTableWidgetItem,
+        QTabWidget,
+        QTextBrowser,
+        QToolBar,
+        QToolButton,
+        QVBoxLayout,
+        QWidget,
+    )
 
     class ElidedLabel(QLabel):
         """
@@ -1261,6 +2509,15 @@ def run_pyqt6_app() -> None:
             p.drawLine(QPointF(8.5, 8.5), QPointF(8.5, 14.0))
             p.drawLine(QPointF(11.5, 8.5), QPointF(11.5, 14.0))
 
+        elif kind == "archive":
+            p.setPen(QPen(accent_purple, 1.9))
+            p.setBrush(QColor(192, 132, 252, 45))
+            p.drawRoundedRect(QRectF(3.0, 3.0, 14.0, 14.0), 2.5, 2.5)
+            p.setPen(QPen(accent_amber, 2.0, Qt.PenStyle.DotLine))
+            p.drawLine(QPointF(10.0, 4.0), QPointF(10.0, 12.0))
+            p.setPen(QPen(fg_main, 1.8))
+            p.drawRect(QRectF(8.2, 11.5, 3.6, 3.2))
+
         p.end()
         return QIcon(pix)
 
@@ -1357,7 +2614,7 @@ def run_pyqt6_app() -> None:
                 size_b = 0
 
             diag = diagnose_file_health(self.file_path)
-            self.setWindowTitle(f"🌐 PyQuadDir 내장 만능 파일 뷰어 — {p.name} ({format_size(size_b)})")
+            self.setWindowTitle(f"🌐 Q-Dir 내장 만능 파일 뷰어 — {p.name} ({format_size(size_b)})")
             self.resize(940, 660)
 
             layout = QVBoxLayout(self)
@@ -1527,7 +2784,7 @@ def run_pyqt6_app() -> None:
         return success_count, errors
 
     # -----------------------------------------------------------------------
-    # 1-A. 자세히(Details) 및 내용(Content) 보기용 테이블 뷰
+    # 1-A. 자세히(Details) 및 내용(Content) 보기용 테이블 뷰 (RubberBand 드래그 다중 선택 탑재)
     # -----------------------------------------------------------------------
     class FileTableView(QTableWidget):
         filesDropped = pyqtSignal(list, str, Qt.KeyboardModifier)
@@ -1545,25 +2802,52 @@ def run_pyqt6_app() -> None:
             self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
             self.setAlternatingRowColors(True)
             self.setShowGrid(False)
+            self.setWordWrap(False)
+            self.setTextElideMode(Qt.TextElideMode.ElideMiddle)
             self.verticalHeader().setVisible(False)
-            self.verticalHeader().setDefaultSectionSize(28)
-            self.setIconSize(QSize(24, 24))
+            self.verticalHeader().setDefaultSectionSize(34)
+            self.verticalHeader().setMinimumSectionSize(30)
+            self.setIconSize(QSize(22, 22))
 
             header = self.horizontalHeader()
+            header.setMinimumHeight(32)
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
             header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
             header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
             header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
             self.setColumnWidth(1, 95)
-            self.setColumnWidth(2, 100)
-            self.setColumnWidth(3, 140)
+            self.setColumnWidth(2, 105)
+            self.setColumnWidth(3, 142)
             header.setSortIndicatorShown(True)
 
-            self.setDragEnabled(True)
+            self.setDragEnabled(False)
             self.setAcceptDrops(True)
             self.viewport().setAcceptDrops(True)
             self.setDropIndicatorShown(True)
-            self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
+            self.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
+
+            self._rubber_band = QRubberBand(QRubberBand.Shape.Rectangle, self.viewport())
+            self._press_pos: Optional[QPoint] = None
+            self._drag_mode: str = "none"  # "none" | "marquee" | "file_drag"
+            self._initial_selected_rows: set[int] = set()
+
+        def apply_responsive_columns(self, viewport_tier: str) -> None:
+            """뷰포트 폭(360px 세로 / 780px 가로 / 데스크톱)에 맞춰 부가 컬럼을 자동 숨김/복원합니다."""
+            if viewport_tier == "mobile_portrait":
+                self.setColumnHidden(2, True)
+                self.setColumnHidden(3, True)
+                self.setColumnWidth(1, 74)
+            elif viewport_tier == "mobile_landscape":
+                self.setColumnHidden(2, True)
+                self.setColumnHidden(3, False)
+                self.setColumnWidth(1, 82)
+                self.setColumnWidth(3, 118)
+            else:
+                self.setColumnHidden(2, False)
+                self.setColumnHidden(3, False)
+                self.setColumnWidth(1, 95)
+                self.setColumnWidth(2, 105)
+                self.setColumnWidth(3, 142)
 
         def selectAll(self) -> None:
             self.clearSelection()
@@ -1576,9 +2860,7 @@ def run_pyqt6_app() -> None:
                 if self.isRowHidden(row):
                     continue
                 first_item = self.item(row, 0)
-                if first_item is None:
-                    continue
-                if bool(first_item.data(Qt.ItemDataRole.UserRole + 1)):
+                if first_item is None or bool(first_item.data(Qt.ItemDataRole.UserRole + 1)):
                     continue
                 left_idx = self.model().index(row, 0)
                 right_idx = self.model().index(row, max_col)
@@ -1605,9 +2887,7 @@ def run_pyqt6_app() -> None:
         def wheelEvent(self, event) -> None:
             if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
                 self.paneFocused.emit()
-                delta = event.angleDelta().y()
-                if delta == 0:
-                    delta = event.angleDelta().x()
+                delta = event.angleDelta().y() or event.angleDelta().x()
                 if delta > 0:
                     self.dir_tab.step_view_mode_zoom(1)
                 elif delta < 0:
@@ -1616,10 +2896,21 @@ def run_pyqt6_app() -> None:
                 return
             super().wheelEvent(event)
 
+        def _selected_valid_rows(self) -> set[int]:
+            rows: set[int] = set()
+            for item in self.selectedItems():
+                r = item.row()
+                first = self.item(r, 0)
+                if first is not None and not bool(first.data(Qt.ItemDataRole.UserRole + 1)):
+                    rows.add(r)
+            return rows
+
         def mousePressEvent(self, event) -> None:
             self.paneFocused.emit()
+            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+
             if event.button() == Qt.MouseButton.MiddleButton:
-                idx = self.indexAt(event.pos())
+                idx = self.indexAt(pos)
                 if idx.isValid():
                     item = self.item(idx.row(), 0)
                     if item is not None:
@@ -1627,7 +2918,116 @@ def run_pyqt6_app() -> None:
                         if full_path and os.path.isdir(full_path):
                             self.middleClickedFolder.emit(full_path)
                             return
+
+            if event.button() == Qt.MouseButton.LeftButton:
+                self._press_pos = pos
+                idx = self.indexAt(pos)
+                modifiers = event.modifiers()
+
+                was_selected = False
+                if idx.isValid():
+                    first_item = self.item(idx.row(), 0)
+                    if first_item is not None:
+                        is_parent = bool(first_item.data(Qt.ItemDataRole.UserRole + 1))
+                        was_selected = first_item.isSelected() and not is_parent
+
+                if (
+                    was_selected
+                    and not (modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier))
+                ):
+                    self._drag_mode = "file_drag"
+                    self.setCurrentIndex(idx)
+                    event.accept()
+                    return
+
+                self._drag_mode = "marquee"
+                if modifiers & Qt.KeyboardModifier.ControlModifier:
+                    self._initial_selected_rows = self._selected_valid_rows()
+                else:
+                    self._initial_selected_rows = set()
+                super().mousePressEvent(event)
+                return
+
             super().mousePressEvent(event)
+
+        def mouseMoveEvent(self, event) -> None:
+            if not (event.buttons() & Qt.MouseButton.LeftButton) or self._press_pos is None:
+                super().mouseMoveEvent(event)
+                return
+
+            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+            dist = (pos - self._press_pos).manhattanLength()
+
+            if self._drag_mode == "file_drag":
+                if dist >= QApplication.startDragDistance():
+                    self._drag_mode = "none"
+                    self._press_pos = None
+                    self.startDrag(Qt.DropAction.CopyAction | Qt.DropAction.MoveAction)
+                return
+
+            if self._drag_mode == "marquee":
+                if dist >= 4 or self._rubber_band.isVisible():
+                    rect = QRect(self._press_pos, pos).normalized()
+                    self._rubber_band.setGeometry(rect)
+                    if not self._rubber_band.isVisible():
+                        self._rubber_band.show()
+                    self._update_marquee_selection(rect, event.modifiers())
+                event.accept()
+                return
+
+            super().mouseMoveEvent(event)
+
+        def mouseReleaseEvent(self, event) -> None:
+            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+            if event.button() == Qt.MouseButton.LeftButton:
+                if self._rubber_band.isVisible():
+                    self._rubber_band.hide()
+                elif self._drag_mode == "file_drag" and self._press_pos is not None:
+                    idx = self.indexAt(pos)
+                    if idx.isValid():
+                        self.clearSelection()
+                        self.selectRow(idx.row())
+                        self.setCurrentIndex(idx)
+                self._press_pos = None
+                self._drag_mode = "none"
+            super().mouseReleaseEvent(event)
+
+        def _update_marquee_selection(self, rect: QRect, modifiers: Qt.KeyboardModifier) -> None:
+            sel_model = self.selectionModel()
+            if sel_model is None:
+                return
+
+            target_rows: set[int] = set(self._initial_selected_rows)
+            max_col = self.columnCount() - 1
+            vp_width = max(10, self.viewport().width())
+
+            for row in range(self.rowCount()):
+                if self.isRowHidden(row):
+                    continue
+                first_item = self.item(row, 0)
+                if first_item is None or bool(first_item.data(Qt.ItemDataRole.UserRole + 1)):
+                    continue
+                idx0 = self.model().index(row, 0)
+                vis_rect = self.visualRect(idx0)
+                if not vis_rect.isValid():
+                    continue
+                row_rect = QRect(0, vis_rect.top(), vp_width, vis_rect.height())
+                if rect.intersects(row_rect):
+                    if (modifiers & Qt.KeyboardModifier.ControlModifier) and (row in self._initial_selected_rows):
+                        target_rows.discard(row)
+                    else:
+                        target_rows.add(row)
+
+            selection = QItemSelection()
+            for r in sorted(target_rows):
+                left_idx = self.model().index(r, 0)
+                right_idx = self.model().index(r, max_col)
+                selection.select(left_idx, right_idx)
+
+            sel_model.select(
+                selection,
+                QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows,
+            )
 
         def selected_file_paths(self) -> List[str]:
             paths: List[str] = []
@@ -1696,7 +3096,7 @@ def run_pyqt6_app() -> None:
             self.filesDropped.emit(src_paths, target_dir, modifiers)
 
     # -----------------------------------------------------------------------
-    # 1-B. 썸네일/아이콘/목록/타일 보기용 리스트 뷰
+    # 1-B. 썸네일/아이콘/목록/타일 보기용 리스트 뷰 (RubberBand 드래그 다중 선택 탑재)
     # -----------------------------------------------------------------------
     class FileIconListView(QListWidget):
         filesDropped = pyqtSignal(list, str, Qt.KeyboardModifier)
@@ -1709,15 +3109,22 @@ def run_pyqt6_app() -> None:
             self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
             self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
             self.setResizeMode(QListView.ResizeMode.Adjust)
+            self.setMovement(QListView.Movement.Static)
             self.setWrapping(True)
             self.setWordWrap(True)
-            self.setUniformItemSizes(False)
+            self.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+            self.setUniformItemSizes(True)
 
-            self.setDragEnabled(True)
+            self.setDragEnabled(False)
             self.setAcceptDrops(True)
             self.viewport().setAcceptDrops(True)
             self.setDropIndicatorShown(True)
-            self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
+            self.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
+
+            self._rubber_band = QRubberBand(QRubberBand.Shape.Rectangle, self.viewport())
+            self._press_pos: Optional[QPoint] = None
+            self._drag_mode: str = "none"
+            self._initial_selected_rows: set[int] = set()
 
         def selectAll(self) -> None:
             self.clearSelection()
@@ -1749,9 +3156,7 @@ def run_pyqt6_app() -> None:
         def wheelEvent(self, event) -> None:
             if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
                 self.paneFocused.emit()
-                delta = event.angleDelta().y()
-                if delta == 0:
-                    delta = event.angleDelta().x()
+                delta = event.angleDelta().y() or event.angleDelta().x()
                 if delta > 0:
                     self.dir_tab.step_view_mode_zoom(1)
                 elif delta < 0:
@@ -1760,16 +3165,121 @@ def run_pyqt6_app() -> None:
                 return
             super().wheelEvent(event)
 
+        def _selected_valid_indices(self) -> set[int]:
+            indices: set[int] = set()
+            for i in range(self.count()):
+                it = self.item(i)
+                if it is not None and it.isSelected() and not bool(it.data(Qt.ItemDataRole.UserRole + 1)):
+                    indices.add(i)
+            return indices
+
         def mousePressEvent(self, event) -> None:
             self.paneFocused.emit()
+            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+
             if event.button() == Qt.MouseButton.MiddleButton:
-                item = self.itemAt(event.pos())
+                item = self.itemAt(pos)
                 if item is not None:
                     full_path = item.data(Qt.ItemDataRole.UserRole)
                     if full_path and os.path.isdir(full_path):
                         self.middleClickedFolder.emit(full_path)
                         return
+
+            if event.button() == Qt.MouseButton.LeftButton:
+                self._press_pos = pos
+                item = self.itemAt(pos)
+                modifiers = event.modifiers()
+
+                was_selected = False
+                if item is not None:
+                    is_parent = bool(item.data(Qt.ItemDataRole.UserRole + 1))
+                    was_selected = item.isSelected() and not is_parent
+
+                if (
+                    was_selected
+                    and not (modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier))
+                ):
+                    self._drag_mode = "file_drag"
+                    self.setCurrentItem(item)
+                    event.accept()
+                    return
+
+                self._drag_mode = "marquee"
+                if modifiers & Qt.KeyboardModifier.ControlModifier:
+                    self._initial_selected_rows = self._selected_valid_indices()
+                else:
+                    self._initial_selected_rows = set()
+                super().mousePressEvent(event)
+                return
+
             super().mousePressEvent(event)
+
+        def mouseMoveEvent(self, event) -> None:
+            if not (event.buttons() & Qt.MouseButton.LeftButton) or self._press_pos is None:
+                super().mouseMoveEvent(event)
+                return
+
+            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+            dist = (pos - self._press_pos).manhattanLength()
+
+            if self._drag_mode == "file_drag":
+                if dist >= QApplication.startDragDistance():
+                    self._drag_mode = "none"
+                    self._press_pos = None
+                    self.startDrag(Qt.DropAction.CopyAction | Qt.DropAction.MoveAction)
+                return
+
+            if self._drag_mode == "marquee":
+                if dist >= 4 or self._rubber_band.isVisible():
+                    rect = QRect(self._press_pos, pos).normalized()
+                    self._rubber_band.setGeometry(rect)
+                    if not self._rubber_band.isVisible():
+                        self._rubber_band.show()
+                    self._update_marquee_selection(rect, event.modifiers())
+                event.accept()
+                return
+
+            super().mouseMoveEvent(event)
+
+        def mouseReleaseEvent(self, event) -> None:
+            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+            if event.button() == Qt.MouseButton.LeftButton:
+                if self._rubber_band.isVisible():
+                    self._rubber_band.hide()
+                elif self._drag_mode == "file_drag" and self._press_pos is not None:
+                    item = self.itemAt(pos)
+                    if item is not None:
+                        self.clearSelection()
+                        if not bool(item.data(Qt.ItemDataRole.UserRole + 1)):
+                            item.setSelected(True)
+                        self.setCurrentItem(item)
+                self._press_pos = None
+                self._drag_mode = "none"
+            super().mouseReleaseEvent(event)
+
+        def _update_marquee_selection(self, rect: QRect, modifiers: Qt.KeyboardModifier) -> None:
+            sel_model = self.selectionModel()
+            if sel_model is None:
+                return
+
+            target_indices: set[int] = set(self._initial_selected_rows)
+            for i in range(self.count()):
+                it = self.item(i)
+                if it is None or it.isHidden() or bool(it.data(Qt.ItemDataRole.UserRole + 1)):
+                    continue
+                item_rect = self.visualItemRect(it)
+                if item_rect.isValid() and rect.intersects(item_rect):
+                    if (modifiers & Qt.KeyboardModifier.ControlModifier) and (i in self._initial_selected_rows):
+                        target_indices.discard(i)
+                    else:
+                        target_indices.add(i)
+
+            selection = QItemSelection()
+            for idx_row in sorted(target_indices):
+                m_idx = self.model().index(idx_row, 0)
+                selection.select(m_idx, m_idx)
+
+            sel_model.select(selection, QItemSelectionModel.SelectionFlag.ClearAndSelect)
 
         def selected_file_paths(self) -> List[str]:
             paths: List[str] = []
@@ -1939,7 +3449,9 @@ def run_pyqt6_app() -> None:
             self.stack.addWidget(self.icon_list)
             layout.addWidget(self.stack, stretch=1)
 
-            self.address_edit.setMinimumWidth(60)
+            self.address_edit.setReadOnly(False)
+            self.address_edit.setClearButtonEnabled(True)
+            self.address_edit.setMinimumWidth(140)
             self.address_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
             self.summary_label = ElidedLabel("", Qt.TextElideMode.ElideRight)
@@ -2065,6 +3577,8 @@ def run_pyqt6_app() -> None:
             norm_path = safe_norm_path(str(target))
             self.current_path = norm_path
             self.address_edit.setText(norm_path)
+            self.address_edit.setToolTip(f"전체 경로: {norm_path}\n(클릭하여 직접 경로 편집 후 Enter)")
+            self.address_edit.setCursorPosition(len(norm_path))
 
             if record_history:
                 if self.history_index < len(self.history) - 1:
@@ -2224,10 +3738,11 @@ def run_pyqt6_app() -> None:
             self.table.setSortingEnabled(False)
             self.table.setRowCount(0)
 
-            icon_px = 40 if self.view_mode == "content" else 24
-            row_h = 46 if self.view_mode == "content" else 28
+            icon_px = 40 if self.view_mode == "content" else 22
+            row_h = 52 if self.view_mode == "content" else 34
             self.table.setIconSize(QSize(icon_px, icon_px))
             self.table.verticalHeader().setDefaultSectionSize(row_h)
+            self.table.apply_responsive_columns(getattr(self.main_window, "viewport_tier", "desktop"))
 
             grouped_rows: List[Tuple[str, Optional[Dict[str, object]]]] = []
             if self.group_by == "none":
@@ -2350,80 +3865,149 @@ def run_pyqt6_app() -> None:
         def _populate_icon_view(
             self, p: Path, records: List[Dict[str, object]], has_parent: bool
         ) -> None:
-            self.icon_list.clear()
+            self.icon_list.setUpdatesEnabled(False)
+            try:
+                self.icon_list.clear()
 
-            xl_px = self.extra_zoom_px
-            mode_px_map = {
-                "extra_large_icons": (xl_px, QSize(xl_px + 28, xl_px + 46), QListView.ViewMode.IconMode),
-                "large_icons": (92, QSize(124, 140), QListView.ViewMode.IconMode),
-                "medium_icons": (60, QSize(98, 108), QListView.ViewMode.IconMode),
-                "small_icons": (32, QSize(160, 42), QListView.ViewMode.ListMode),
-                "list": (24, QSize(190, 32), QListView.ViewMode.ListMode),
-                "tiles": (52, QSize(240, 68), QListView.ViewMode.ListMode),
-            }
-            icon_px, grid_sz, lv_mode = mode_px_map.get(
-                self.view_mode, (60, QSize(98, 108), QListView.ViewMode.IconMode)
-            )
-            self.icon_list.setViewMode(lv_mode)
-            self.icon_list.setIconSize(QSize(icon_px, icon_px))
-            self.icon_list.setGridSize(grid_sz)
-            self.icon_list.setWrapping(True)
-            if lv_mode == QListView.ViewMode.ListMode:
-                self.icon_list.setFlow(QListView.Flow.TopToBottom)
-            else:
-                self.icon_list.setFlow(QListView.Flow.LeftToRight)
-
-            if has_parent:
-                parent_str = safe_norm_path(str(p.parent))
-                p_item = QListWidgetItem("📁 .. (상위 폴더)")
-                p_item.setData(Qt.ItemDataRole.UserRole, parent_str)
-                p_item.setData(Qt.ItemDataRole.UserRole + 1, True)
-                p_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
-                f = p_item.font()
-                f.setBold(True)
-                p_item.setFont(f)
-                self.icon_list.addItem(p_item)
-
-            for rec in records:
-                is_dir = bool(rec["is_dir"])
-                ext = str(rec["ext"])
-                mtime = float(rec["mtime"])  # type: ignore[arg-type]
-                disp_name = str(rec["disp_name"])
-                full_path = str(rec["path"])
-                size_str = str(rec["size_str"])
-                type_str = str(rec["type_str"])
-
-                if self.view_mode == "tiles":
-                    label_text = f"{disp_name}\n{type_str} · {size_str}"
-                else:
-                    label_text = disp_name
-
-                item = QListWidgetItem(label_text)
-                item.setData(Qt.ItemDataRole.UserRole, full_path)
-                item.setData(Qt.ItemDataRole.UserRole + 1, False)
-                item.setToolTip(f"{disp_name}\n유형: {type_str}\n크기: {size_str}\n수정한 날짜: {rec['date_str']}")
-
-                icon = get_entry_icon_or_thumbnail(
-                    self.icon_provider,
-                    full_path,
-                    is_dir,
-                    ext,
-                    mtime,
-                    icon_px,
-                    show_icons=self.main_window.show_icons,
+                xl_px = self.extra_zoom_px
+                mode_specs = {
+                    "extra_large_icons": (
+                        xl_px,
+                        QSize(xl_px + 44, xl_px + 64),
+                        QSize(xl_px + 36, xl_px + 56),
+                        QListView.ViewMode.IconMode,
+                        QListView.Flow.LeftToRight,
+                        10,
+                        True,
+                        20,
+                    ),
+                    "large_icons": (
+                        88,
+                        QSize(144, 160),
+                        QSize(136, 152),
+                        QListView.ViewMode.IconMode,
+                        QListView.Flow.LeftToRight,
+                        8,
+                        True,
+                        16,
+                    ),
+                    "medium_icons": (
+                        56,
+                        QSize(118, 130),
+                        QSize(110, 122),
+                        QListView.ViewMode.IconMode,
+                        QListView.Flow.LeftToRight,
+                        6,
+                        True,
+                        14,
+                    ),
+                    "small_icons": (
+                        26,
+                        QSize(200, 40),
+                        QSize(192, 36),
+                        QListView.ViewMode.ListMode,
+                        QListView.Flow.LeftToRight,
+                        4,
+                        False,
+                        20,
+                    ),
+                    "list": (
+                        22,
+                        QSize(228, 34),
+                        QSize(220, 30),
+                        QListView.ViewMode.ListMode,
+                        QListView.Flow.TopToBottom,
+                        2,
+                        False,
+                        24,
+                    ),
+                    "tiles": (
+                        48,
+                        QSize(292, 80),
+                        QSize(284, 74),
+                        QListView.ViewMode.ListMode,
+                        QListView.Flow.LeftToRight,
+                        6,
+                        False,
+                        24,
+                    ),
+                }
+                icon_px, grid_sz, item_hint, lv_mode, flow, spacing, w_wrap, max_vcols = mode_specs.get(
+                    self.view_mode, mode_specs["medium_icons"]
                 )
-                if not icon.isNull():
-                    item.setIcon(icon)
+                self.icon_list.setViewMode(lv_mode)
+                self.icon_list.setFlow(flow)
+                self.icon_list.setWrapping(True)
+                self.icon_list.setWordWrap(w_wrap)
+                self.icon_list.setIconSize(QSize(icon_px, icon_px))
+                self.icon_list.setGridSize(grid_sz)
+                self.icon_list.setSpacing(spacing)
 
-                color = self.main_window.get_color_for_entry(is_dir=is_dir, ext=ext)
-                if color is not None:
-                    item.setForeground(color)
-                if is_dir:
-                    f = item.font()
+                align_flag = (
+                    (Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+                    if lv_mode == QListView.ViewMode.IconMode
+                    else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                )
+
+                if has_parent:
+                    parent_str = safe_norm_path(str(p.parent))
+                    p_item = QListWidgetItem("📁 .. (상위 폴더)")
+                    p_item.setData(Qt.ItemDataRole.UserRole, parent_str)
+                    p_item.setData(Qt.ItemDataRole.UserRole + 1, True)
+                    p_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+                    p_item.setSizeHint(item_hint)
+                    p_item.setTextAlignment(align_flag)
+                    f = p_item.font()
                     f.setBold(True)
-                    item.setFont(f)
+                    p_item.setFont(f)
+                    self.icon_list.addItem(p_item)
 
-                self.icon_list.addItem(item)
+                for rec in records:
+                    is_dir = bool(rec["is_dir"])
+                    ext = str(rec["ext"])
+                    mtime = float(rec["mtime"])  # type: ignore[arg-type]
+                    disp_name = str(rec["disp_name"])
+                    full_path = str(rec["path"])
+                    size_str = str(rec["size_str"])
+                    type_str = str(rec["type_str"])
+
+                    safe_name = elide_middle_smart(disp_name, max_vcols)
+                    if self.view_mode == "tiles":
+                        meta_line = elide_middle_smart(f"{type_str} · {size_str}", max_vcols + 4)
+                        label_text = f"{safe_name}\n{meta_line}"
+                    else:
+                        label_text = safe_name
+
+                    item = QListWidgetItem(label_text)
+                    item.setData(Qt.ItemDataRole.UserRole, full_path)
+                    item.setData(Qt.ItemDataRole.UserRole + 1, False)
+                    item.setSizeHint(item_hint)
+                    item.setTextAlignment(align_flag)
+                    item.setToolTip(f"{disp_name}\n유형: {type_str}\n크기: {size_str}\n수정한 날짜: {rec['date_str']}")
+
+                    icon = get_entry_icon_or_thumbnail(
+                        self.icon_provider,
+                        full_path,
+                        is_dir,
+                        ext,
+                        mtime,
+                        icon_px,
+                        show_icons=self.main_window.show_icons,
+                    )
+                    if not icon.isNull():
+                        item.setIcon(icon)
+
+                    color = self.main_window.get_color_for_entry(is_dir=is_dir, ext=ext)
+                    if color is not None:
+                        item.setForeground(color)
+                    if is_dir:
+                        f = item.font()
+                        f.setBold(True)
+                        item.setFont(f)
+
+                    self.icon_list.addItem(item)
+            finally:
+                self.icon_list.setUpdatesEnabled(True)
 
         def apply_filter(self, keyword: str) -> None:
             kw = keyword.strip().lower()
@@ -2696,6 +4280,36 @@ def run_pyqt6_app() -> None:
                 act_copy.triggered.connect(lambda: self.main_window.set_clipboard_files(selected_paths, "copy"))
                 act_cut.triggered.connect(lambda: self.main_window.set_clipboard_files(selected_paths, "move"))
 
+                menu.addSeparator()
+                arch_menu = menu.addMenu("🗜️ 압축 / 압축 풀기")
+                first_name = Path(selected_paths[0]).stem or Path(selected_paths[0]).name or "archive"
+                quick_zip_name = f"{first_name}.zip" if len(selected_paths) == 1 else f"{Path(self.current_path).name or '묶음압축'}.zip"
+                act_qzip = arch_menu.addAction(f"⚡ '{quick_zip_name}'(으)로 즉시 압축")
+                act_qzip.triggered.connect(lambda: self.quick_compress_selected("zip"))
+                act_cdlg = arch_menu.addAction("🗜️ 압축 파일 이름/형식(.zip, .tar.gz) 지정하여 압축... (Alt+F5)")
+                act_cdlg.triggered.connect(self.compress_selected_interactive)
+
+                if len(selected_paths) == 1 and is_archive_file(selected_paths[0]):
+                    arch_file = selected_paths[0]
+                    stem_sub = strip_archive_stem(arch_file)
+                    arch_menu.addSeparator()
+                    act_ex_sub = arch_menu.addAction(f"📂 '{stem_sub}/' 하위 폴더에 압축 풀기 (권장, Alt+F6)")
+                    act_ex_sub.triggered.connect(lambda: self.extract_selected_archive(create_subfolder=True))
+                    act_ex_here = arch_menu.addAction("📥 현재 폴더에 바로 압축 풀기")
+                    act_ex_here.triggered.connect(lambda: self.extract_selected_archive(create_subfolder=False))
+                    ex_pane_sub = arch_menu.addMenu("📑 다른 패널(1~4번 창)로 압축 풀기")
+                    for p_i, other_pane in enumerate(self.main_window.panes):
+                        d_p = other_pane.current_path()
+                        if not d_p:
+                            continue
+                        act_ep = ex_pane_sub.addAction(f"[{p_i + 1}번 창] {Path(d_p).name or d_p} ({d_p})")
+                        act_ep.triggered.connect(
+                            lambda checked=False, dest=d_p: self.extract_selected_archive(
+                                dest_override=dest, create_subfolder=True
+                            )
+                        )
+                menu.addSeparator()
+
             if self.main_window.clipboard_paths:
                 mode_kr = "이동" if self.main_window.clipboard_mode == "move" else "복사"
                 act_paste = menu.addAction(
@@ -2894,6 +4508,135 @@ def run_pyqt6_app() -> None:
             )
             QMessageBox.information(self, f"'{p.name}' 상세 속성 및 헤더 진단", info_text)
 
+        def quick_compress_selected(self, fmt: str = "zip") -> None:
+            paths = self.selected_file_paths()
+            if not paths:
+                QMessageBox.information(self, "압축 안내", "먼저 압축할 파일이나 폴더를 선택해 주세요.")
+                return
+            if len(paths) == 1:
+                stem = Path(paths[0]).stem if os.path.isfile(paths[0]) else Path(paths[0]).name
+            else:
+                stem = Path(self.current_path).name or "Archive"
+            ext = ".zip" if fmt == "zip" else (".tar.gz" if fmt == "tar.gz" else ".tar")
+            out_path = get_unique_target_path(Path(self.current_path), f"{stem}{ext}")
+            ok, result_msg, cnt = compress_items_to_archive(paths, str(out_path), archive_format=fmt)
+            self.main_window.refresh_all_panes()
+            if ok:
+                self.select_specific_file(result_msg)
+                self.main_window.show_status_message(
+                    f"✅ {cnt}개 항목을 '{Path(result_msg).name}'(으)로 압축했습니다.", 4000
+                )
+            else:
+                QMessageBox.warning(self, "압축 오류", result_msg)
+
+        def compress_selected_interactive(self) -> None:
+            paths = self.selected_file_paths()
+            if not paths:
+                QMessageBox.information(self, "압축 안내", "먼저 압축할 파일이나 폴더를 선택해 주세요.")
+                return
+            if len(paths) == 1:
+                stem = Path(paths[0]).stem if os.path.isfile(paths[0]) else Path(paths[0]).name
+            else:
+                stem = Path(self.current_path).name or "Archive"
+            default_name = f"{stem}.zip"
+            name_str, ok = QInputDialog.getText(
+                self,
+                "🗜️ 파일/폴더 압축하기",
+                "생성할 압축 파일 이름 (.zip, .tar.gz, .tar 지원):",
+                text=default_name,
+            )
+            if not (ok and name_str.strip()):
+                return
+            fname = name_str.strip()
+            low = fname.lower()
+            if low.endswith((".tar.gz", ".tgz")):
+                fmt = "tar.gz"
+            elif low.endswith(".tar"):
+                fmt = "tar"
+            else:
+                fmt = "zip"
+                if not low.endswith(".zip"):
+                    fname += ".zip"
+            out_path = Path(self.current_path) / fname
+            ok_c, result_msg, cnt = compress_items_to_archive(paths, str(out_path), archive_format=fmt)
+            self.main_window.refresh_all_panes()
+            if ok_c:
+                self.select_specific_file(result_msg)
+                self.main_window.show_status_message(
+                    f"✅ {cnt}개 항목을 '{Path(result_msg).name}'(으)로 압축 완료!", 4000
+                )
+            else:
+                QMessageBox.warning(self, "압축 오류", result_msg)
+
+        def extract_selected_archive(
+            self, dest_override: Optional[str] = None, create_subfolder: bool = True
+        ) -> None:
+            paths = self.selected_file_paths()
+            archives = [p for p in paths if is_archive_file(p)]
+            if not archives:
+                QMessageBox.information(
+                    self,
+                    "압축 풀기 안내",
+                    "먼저 압축을 풀 아카이브 파일(.zip, .tar.gz, .tar, .7z 등)을 선택해 주세요.",
+                )
+                return
+            dest_base = dest_override or self.current_path
+            total_extracted = 0
+            last_target_dir = ""
+            errors: List[str] = []
+            for arc in archives:
+                ok_e, msg_or_dir, cnt = extract_archive_smart(
+                    arc, dest_base, create_subfolder=create_subfolder
+                )
+                if ok_e:
+                    total_extracted += cnt
+                    last_target_dir = msg_or_dir
+                else:
+                    errors.append(f"{Path(arc).name}: {msg_or_dir}")
+            self.main_window.refresh_all_panes()
+            if last_target_dir and os.path.exists(last_target_dir) and dest_override is None:
+                self.select_specific_file(last_target_dir)
+            if errors:
+                QMessageBox.warning(self, "압축 해제 오류", "\n".join(errors[:8]))
+            else:
+                self.main_window.show_status_message(
+                    f"📂 압축 해제 완료 ({total_extracted}개 파일 -> '{last_target_dir}')", 4000
+                )
+
+        def apply_responsive_mode(self, viewport_tier: str) -> None:
+            nav_lay = self.layout()
+            if nav_lay is not None:
+                if viewport_tier == "mobile_portrait":
+                    nav_lay.setContentsMargins(2, 2, 2, 2)
+                    nav_lay.setSpacing(2)
+                else:
+                    nav_lay.setContentsMargins(4, 4, 4, 4)
+                    nav_lay.setSpacing(4)
+
+            if viewport_tier == "mobile_portrait":
+                self.address_edit.setMinimumWidth(95)
+                self.filter_edit.setFixedWidth(64)
+                self.filter_edit.setPlaceholderText("🔍필터")
+                self.btn_forward.hide()
+                for w in (self.btn_back, self.btn_up, self.btn_refresh, self.btn_star):
+                    w.setFixedSize(24, 24)
+            elif viewport_tier == "mobile_landscape":
+                self.address_edit.setMinimumWidth(115)
+                self.filter_edit.setFixedWidth(82)
+                self.filter_edit.setPlaceholderText("🔍 필터...")
+                self.btn_forward.show()
+                for w in (self.btn_back, self.btn_forward, self.btn_up, self.btn_refresh, self.btn_star):
+                    w.setFixedSize(25, 25)
+            else:
+                self.address_edit.setMinimumWidth(140)
+                self.filter_edit.setFixedWidth(115)
+                self.filter_edit.setPlaceholderText("🔍 이름/확장자 필터...")
+                self.btn_forward.show()
+                for w in (self.btn_back, self.btn_forward, self.btn_up, self.btn_refresh, self.btn_star):
+                    w.setFixedSize(28, 28)
+
+            self.table.apply_responsive_columns(viewport_tier)
+
     # -----------------------------------------------------------------------
     # 3. 우측 미리 보기 창 (HTML + Excel .xlsx 시트 프리뷰 + 헤더 진단 지원)
     # -----------------------------------------------------------------------
@@ -2914,42 +4657,70 @@ def run_pyqt6_app() -> None:
 
             hdr = QHBoxLayout()
             self.title_lbl = QLabel("🖼️ 미리 보기 창")
-            self.title_lbl.setStyleSheet("font-weight: bold; font-size: 13px;")
+            self.title_lbl.setObjectName("InspectorTitleLabel")
             hdr.addWidget(self.title_lbl, stretch=1)
 
-            btn_close = QToolButton()
-            btn_close.setText("✕")
-            btn_close.setToolTip("창 닫기")
-            btn_close.clicked.connect(self.main_window.close_inspector_pane)
-            hdr.addWidget(btn_close)
+            self.btn_close = QToolButton()
+            self.btn_close.setObjectName("InspectorCloseBtn")
+            self.btn_close.setText("✕")
+            self.btn_close.setToolTip("창 닫기")
+            self.btn_close.clicked.connect(self.main_window.close_inspector_pane)
+            hdr.addWidget(self.btn_close)
             layout.addLayout(hdr)
 
             self.img_label = QLabel()
+            self.img_label.setObjectName("InspectorPreviewLabel")
             self.img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.img_label.setMinimumHeight(180)
             self.img_label.setWordWrap(True)
             layout.addWidget(self.img_label)
 
             self.html_browser = QTextBrowser()
+            self.html_browser.setObjectName("InspectorHtmlBrowser")
             self.html_browser.setOpenExternalLinks(True)
             self.html_browser.hide()
             layout.addWidget(self.html_browser, stretch=1)
 
             self.excel_table = QTableWidget()
+            self.excel_table.setObjectName("InspectorExcelTable")
             self.excel_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
             self.excel_table.setAlternatingRowColors(True)
             self.excel_table.hide()
             layout.addWidget(self.excel_table, stretch=1)
 
             self.text_preview = QPlainTextEdit()
+            self.text_preview.setObjectName("InspectorTextPreview")
             self.text_preview.setReadOnly(True)
             self.text_preview.hide()
             layout.addWidget(self.text_preview, stretch=1)
 
             self.meta_label = QLabel("파일이나 폴더를 선택하면 여기에 정보가 표시됩니다.")
+            self.meta_label.setObjectName("InspectorMetaLabel")
             self.meta_label.setWordWrap(True)
+            self.meta_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             self.meta_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
             layout.addWidget(self.meta_label, stretch=1)
+            self.apply_theme(getattr(self.main_window, "dark_mode", True))
+
+        def apply_theme(self, dark_mode: bool) -> None:
+            if dark_mode:
+                self.setStyleSheet(
+                    "QFrame#InspectorPane { background-color: #1E293B; color: #F8FAFC; border: 1px solid #334155; border-radius: 8px; } "
+                    "QLabel#InspectorTitleLabel { color: #38BDF8; font-weight: 700; font-size: 13px; background: transparent; } "
+                    "QLabel#InspectorPreviewLabel { color: #E2E8F0; background-color: #0F172A; border: 1px solid #334155; border-radius: 6px; padding: 6px; } "
+                    "QLabel#InspectorMetaLabel { color: #F8FAFC; background-color: #0F172A; border: 1px solid #334155; border-radius: 6px; padding: 8px; font-size: 12px; } "
+                    "QToolButton#InspectorCloseBtn { color: #F8FAFC; background-color: #334155; border: 1px solid #475569; border-radius: 5px; padding: 2px 7px; font-weight: bold; } "
+                    "QToolButton#InspectorCloseBtn:hover { background-color: #EF4444; color: #FFFFFF; border-color: #F87171; }"
+                )
+            else:
+                self.setStyleSheet(
+                    "QFrame#InspectorPane { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 8px; } "
+                    "QLabel#InspectorTitleLabel { color: #1E3A8A; font-weight: 700; font-size: 13px; background: transparent; } "
+                    "QLabel#InspectorPreviewLabel { color: #1E293B; background-color: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 6px; padding: 6px; } "
+                    "QLabel#InspectorMetaLabel { color: #0F172A; background-color: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; font-size: 12px; } "
+                    "QToolButton#InspectorCloseBtn { color: #0F172A; background-color: #E2E8F0; border: 1px solid #CBD5E1; border-radius: 5px; padding: 2px 7px; font-weight: bold; } "
+                    "QToolButton#InspectorCloseBtn:hover { background-color: #EF4444; color: #FFFFFF; border-color: #DC2626; }"
+                )
 
         def set_mode(self, mode: str) -> None:
             self.mode = mode
@@ -3163,10 +4934,11 @@ def run_pyqt6_app() -> None:
             self.tab_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             self.tab_widget.setTabsClosable(True)
             self.tab_widget.setMovable(True)
-            self.tab_widget.setDocumentMode(True)
+            self.tab_widget.setDocumentMode(False)
             self.tab_widget.setUsesScrollButtons(True)
+            self.tab_widget.tabBar().setDrawBase(False)
             self.tab_widget.tabBar().setExpanding(False)
-            self.tab_widget.tabBar().setElideMode(Qt.TextElideMode.ElideRight)
+            self.tab_widget.tabBar().setElideMode(Qt.TextElideMode.ElideMiddle)
             self.tab_widget.tabCloseRequested.connect(self.close_tab)
             self.tab_widget.currentChanged.connect(self._on_tab_changed)
             layout.addWidget(self.tab_widget, stretch=1)
@@ -3239,29 +5011,65 @@ def run_pyqt6_app() -> None:
                     modes.append(w.view_mode)
             return modes
 
+        def _refresh_all_tab_titles(self) -> None:
+            all_paths = self.get_all_tab_paths()
+            curr_idx = self.tab_widget.currentIndex()
+            for i in range(self.tab_widget.count()):
+                w = self.tab_widget.widget(i)
+                if isinstance(w, DirectoryTab):
+                    p_str = w.current_path
+                    short_lbl = self._short_tab_name(p_str, all_paths)
+                    prefix = "● " if i == curr_idx else ""
+                    self.tab_widget.setTabText(i, f"{prefix}{short_lbl}")
+                    self.tab_widget.setTabToolTip(i, f"전체 경로: {p_str}")
+
         def _on_tab_changed(self, index: int) -> None:
+            self._refresh_all_tab_titles()
             t = self.current_tab()
             if t:
                 self.path_title_label.setText(t.current_path)
-                self.path_title_label.setToolTip(t.current_path)
+                self.path_title_label.setToolTip(f"전체 경로: {t.current_path}")
                 t.update_status_summary()
             self.main_window.save_config()
 
         def _update_tab_title(self, tab: DirectoryTab, new_path: str) -> None:
-            idx = self.tab_widget.indexOf(tab)
-            if idx >= 0:
-                self.tab_widget.setTabText(idx, self._short_tab_name(new_path))
-                self.tab_widget.setTabToolTip(idx, new_path)
+            self._refresh_all_tab_titles()
             if tab == self.current_tab():
                 self.path_title_label.setText(new_path)
-                self.path_title_label.setToolTip(new_path)
+                self.path_title_label.setToolTip(f"전체 경로: {new_path}")
             self.main_window.save_config()
 
+        def apply_responsive_mode(self, viewport_tier: str) -> None:
+            if viewport_tier == "mobile_portrait":
+                self.setMinimumSize(120, 90)
+                self.btn_new_tab.setText("")
+                self.btn_new_tab.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+            elif viewport_tier == "mobile_landscape":
+                self.setMinimumSize(140, 100)
+                self.btn_new_tab.setText("탭")
+                self.btn_new_tab.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            else:
+                self.setMinimumSize(160, 120)
+                self.btn_new_tab.setText("새 탭")
+                self.btn_new_tab.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+
+            for i in range(self.tab_widget.count()):
+                w = self.tab_widget.widget(i)
+                if isinstance(w, DirectoryTab):
+                    w.apply_responsive_mode(viewport_tier)
+
         @staticmethod
-        def _short_tab_name(path_str: str) -> str:
+        def _short_tab_name(path_str: str, peer_paths: Optional[List[str]] = None) -> str:
             p = Path(path_str)
             name = p.name or path_str
-            return name if len(name) <= 18 else name[:16] + "…"
+            if peer_paths:
+                same_leaf = [
+                    x for x in peer_paths
+                    if x != path_str and (Path(x).name or x).casefold() == name.casefold()
+                ]
+                if same_leaf and p.parent and p.parent.name:
+                    name = f"{p.parent.name}/{name}"
+            return elide_middle_smart(name, 20)
 
     # -----------------------------------------------------------------------
     # 5. 설정 다이얼로그 (색상 규칙 & 즐겨찾기 관리)
@@ -3468,15 +5276,15 @@ def run_pyqt6_app() -> None:
             self._syncing_splitters: bool = False
             self.panes: List[ExplorerPane] = []
 
-            self.setWindowTitle("PyQuadDir Desktop Explorer v2.5 — 4분할 다중 탭 파일 탐색기")
-            self.setMinimumSize(960, 620)
+            self.setWindowTitle("PyQuadDir Desktop Explorer v3.1 — 4분할 다중 탭 파일 탐색기")
+            self.setMinimumSize(320, 420)
 
             self.config = load_app_config()
             geom = self.config.get("window_geometry")
             if isinstance(geom, list) and len(geom) >= 4:
                 try:
-                    w = max(960, int(geom[2]))
-                    h = max(620, int(geom[3]))
+                    w = max(320, int(geom[2]))
+                    h = max(420, int(geom[3]))
                     self.resize(w, h)
                 except Exception:
                     self.resize(1520, 940)
@@ -3491,7 +5299,20 @@ def run_pyqt6_app() -> None:
             self.favorites: List[Dict[str, str]] = self.config.get(  # type: ignore[assignment]
                 "favorites", get_default_favorites()
             )
-            self.current_layout_mode: str = str(self.config.get("layout_mode", "quad"))
+            saved_pref_layout = str(self.config.get("preferred_desktop_layout", self.config.get("layout_mode", "quad")))
+            self.current_layout_mode: str = (
+                saved_pref_layout
+                if saved_pref_layout in ("quad", "2h", "2v", "3_left", "3_top", "single")
+                else "quad"
+            )
+            self.preferred_desktop_layout: str = self.current_layout_mode
+            self.preferred_desktop_geometry: List[object] = (
+                list(geom) if isinstance(geom, list) and len(geom) >= 4 and int(geom[2]) > 860
+                else [80, 60, 1520, 940, False]
+            )
+            self.viewport_tier: str = "desktop"
+            self.landscape_pair_index: int = 0
+
             self.default_view_mode: str = str(self.config.get("default_view_mode", "details"))
             self.show_icons: bool = bool(self.config.get("show_icons", True))
             self.show_file_extensions: bool = bool(self.config.get("show_file_extensions", True))
@@ -3502,15 +5323,23 @@ def run_pyqt6_app() -> None:
             self.clipboard_paths: List[str] = []
             self.clipboard_mode: str = "copy"
 
+            self._config_dirty: bool = False
             self._build_ui()
             self._apply_theme()
             self._refresh_toolbar_icons()
             self.set_layout_mode(self.current_layout_mode)
             self._set_active_pane(self.active_pane_index)
+            self._apply_responsive_viewport(self.width(), force=True)
 
+            self._config_dirty = False
+            atexit.register(self._save_config_on_exit)
+
+        def _finish_initial_startup(self) -> None:
             self._is_initializing = False
-            self.save_config()
-            atexit.register(self.save_config)
+
+        def _save_config_on_exit(self) -> None:
+            if getattr(self, "_config_dirty", False):
+                self.save_config()
 
         def showEvent(self, event) -> None:
             super().showEvent(event)
@@ -3518,6 +5347,7 @@ def run_pyqt6_app() -> None:
                 self._initial_equalized = True
                 QTimer.singleShot(0, self.equalize_splitters)
                 QTimer.singleShot(60, self.equalize_splitters)
+                QTimer.singleShot(80, self._finish_initial_startup)
 
         def show_status_message(self, msg: str, timeout: int = 0) -> None:
             """상태 표시줄 텍스트가 길어져도 메인 창 폭이 절대 늘어나지 않도록 말줄임 처리합니다."""
@@ -3532,16 +5362,39 @@ def run_pyqt6_app() -> None:
         def save_config(self) -> None:
             if getattr(self, "_is_initializing", False) or len(self.panes) < 4:
                 return
+            self._config_dirty = True
             pane_tabs = [pane.get_all_tab_paths() for pane in self.panes]
             pane_active_tab_indices = [pane.tab_widget.currentIndex() for pane in self.panes]
             pane_tab_view_modes = [pane.get_all_tab_view_modes() for pane in self.panes]
             geom_rect = self.normalGeometry() if self.isMaximized() else self.geometry()
+            v_tier = getattr(self, "viewport_tier", "desktop")
+            if v_tier == "desktop" and geom_rect.width() > 860:
+                self.preferred_desktop_geometry = [
+                    geom_rect.x(),
+                    geom_rect.y(),
+                    geom_rect.width(),
+                    geom_rect.height(),
+                    self.isMaximized(),
+                ]
+            saved_layout = self.preferred_desktop_layout if v_tier != "desktop" else self.current_layout_mode
+            saved_geom = (
+                self.preferred_desktop_geometry
+                if v_tier != "desktop"
+                else [
+                    geom_rect.x(),
+                    geom_rect.y(),
+                    geom_rect.width(),
+                    geom_rect.height(),
+                    self.isMaximized(),
+                ]
+            )
             save_app_config({
                 "dark_mode": self.dark_mode,
                 "color_filter_enabled": self.color_filter_enabled,
                 "color_rules": self.color_rules,
                 "favorites": self.favorites,
-                "layout_mode": self.current_layout_mode,
+                "layout_mode": saved_layout,
+                "preferred_desktop_layout": self.preferred_desktop_layout,
                 "default_view_mode": self.default_view_mode,
                 "show_icons": self.show_icons,
                 "show_file_extensions": self.show_file_extensions,
@@ -3550,28 +5403,25 @@ def run_pyqt6_app() -> None:
                 "pane_tabs": pane_tabs,
                 "pane_active_tab_indices": pane_active_tab_indices,
                 "pane_tab_view_modes": pane_tab_view_modes,
-                "window_geometry": [
-                    geom_rect.x(),
-                    geom_rect.y(),
-                    geom_rect.width(),
-                    geom_rect.height(),
-                    self.isMaximized(),
-                ],
+                "window_geometry": saved_geom,
             })
 
         def closeEvent(self, event) -> None:
             self._is_initializing = False
-            self.save_config()
+            if getattr(self, "_config_dirty", False):
+                self.save_config()
             super().closeEvent(event)
 
         def _build_ui(self) -> None:
             cmd_tb = QToolBar("탐색기 명령 바")
+            cmd_tb.setObjectName("CommandToolbar")
             cmd_tb.setMovable(False)
             cmd_tb.setIconSize(QSize(20, 20))
             self.addToolBar(Qt.ToolBarArea.TopToolBarArea, cmd_tb)
+            self.cmd_tb = cmd_tb
 
             self.btn_new = QToolButton()
-            self.btn_new.setText("새로 만들기 ▼")
+            self.btn_new.setText("새로 만들기 ▾")
             self.btn_new.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             self.btn_new.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
             menu_new = QMenu(self.btn_new)
@@ -3597,38 +5447,48 @@ def run_pyqt6_app() -> None:
 
             cmd_tb.addSeparator()
 
-            act_cut = QToolButton()
-            act_cut.setText("✂️ 잘라내기")
-            act_cut.setToolTip("선택 항목 잘라내기 (Ctrl+X)")
-            act_cut.clicked.connect(self._shortcut_cut)
-            cmd_tb.addWidget(act_cut)
+            self.act_cut = QToolButton()
+            self.act_cut.setText("✂️ 잘라내기")
+            self.act_cut.setToolTip("선택 항목 잘라내기 (Ctrl+X)")
+            self.act_cut.clicked.connect(self._shortcut_cut)
+            cmd_tb.addWidget(self.act_cut)
 
-            act_copy = QToolButton()
-            act_copy.setText("📋 복사")
-            act_copy.setToolTip("선택 항목 복사 (Ctrl+C)")
-            act_copy.clicked.connect(self._shortcut_copy)
-            cmd_tb.addWidget(act_copy)
+            self.act_copy = QToolButton()
+            self.act_copy.setText("📋 복사")
+            self.act_copy.setToolTip("선택 항목 복사 (Ctrl+C)")
+            self.act_copy.clicked.connect(self._shortcut_copy)
+            cmd_tb.addWidget(self.act_copy)
 
-            act_paste = QToolButton()
-            act_paste.setText("📥 붙여넣기")
-            act_paste.setToolTip("현재 활성 탭에 붙여넣기 (Ctrl+V)")
-            act_paste.clicked.connect(self._shortcut_paste)
-            cmd_tb.addWidget(act_paste)
+            self.act_paste = QToolButton()
+            self.act_paste.setText("📥 붙여넣기")
+            self.act_paste.setToolTip("현재 활성 탭에 붙여넣기 (Ctrl+V)")
+            self.act_paste.clicked.connect(self._shortcut_paste)
+            cmd_tb.addWidget(self.act_paste)
 
-            act_rename = QToolButton()
-            act_rename.setText("✏️ 이름 바꾸기")
-            act_rename.setToolTip("선택 항목 이름 바꾸기 (F2)")
-            act_rename.clicked.connect(self._shortcut_rename)
-            cmd_tb.addWidget(act_rename)
+            self.act_rename = QToolButton()
+            self.act_rename.setText("✏️ 이름 바꾸기")
+            self.act_rename.setToolTip("선택 항목 이름 바꾸기 (F2)")
+            self.act_rename.clicked.connect(self._shortcut_rename)
+            cmd_tb.addWidget(self.act_rename)
 
-            btn_send = QToolButton()
-            btn_send.setText("📤 다른 패널로 전송 ▼")
-            btn_send.setToolTip("선택한 항목을 다른 패널(1~4번 창)로 즉시 복사하거나 이동합니다")
-            btn_send.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-            self.send_menu = QMenu(btn_send)
+            self.btn_send = QToolButton()
+            self.btn_send.setText("📤 다른 패널로 전송 ▾")
+            self.btn_send.setToolTip("선택한 항목을 다른 패널(1~4번 창)로 즉시 복사하거나 이동합니다")
+            self.btn_send.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            self.send_menu = QMenu(self.btn_send)
             self.send_menu.aboutToShow.connect(self._populate_send_menu)
-            btn_send.setMenu(self.send_menu)
-            cmd_tb.addWidget(btn_send)
+            self.btn_send.setMenu(self.send_menu)
+            cmd_tb.addWidget(self.btn_send)
+
+            self.btn_archive = QToolButton()
+            self.btn_archive.setText("압축/해제 ▾")
+            self.btn_archive.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            self.btn_archive.setToolTip("선택한 파일/폴더 압축(Alt+F5) 또는 압축 파일 풀기(Alt+F6)")
+            self.btn_archive.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            self.archive_menu = QMenu(self.btn_archive)
+            self.archive_menu.aboutToShow.connect(self._populate_archive_menu)
+            self.btn_archive.setMenu(self.archive_menu)
+            cmd_tb.addWidget(self.btn_archive)
 
             self.btn_del = QToolButton()
             self.btn_del.setText("삭제")
@@ -3640,7 +5500,7 @@ def run_pyqt6_app() -> None:
             cmd_tb.addSeparator()
 
             self.btn_sort = QToolButton()
-            self.btn_sort.setText("정렬 ▼")
+            self.btn_sort.setText("정렬 ▾")
             self.btn_sort.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             self.btn_sort.setToolTip("현재 활성 탭의 정렬 기준·방향 및 분류(그룹화) 방법을 설정합니다")
             self.btn_sort.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -3650,7 +5510,7 @@ def run_pyqt6_app() -> None:
             cmd_tb.addWidget(self.btn_sort)
 
             self.btn_view = QToolButton()
-            self.btn_view.setText("보기 ▼")
+            self.btn_view.setText("보기 ▾")
             self.btn_view.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             self.btn_view.setToolTip("아이콘/썸네일 크기 전환 (Ctrl + 마우스 휠 스크롤로도 전환 가능)")
             self.btn_view.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -3662,7 +5522,7 @@ def run_pyqt6_app() -> None:
             cmd_tb.addSeparator()
 
             self.btn_layout_menu = QToolButton()
-            self.btn_layout_menu.setText("레이아웃: 4분할 ▼")
+            self.btn_layout_menu.setText("레이아웃: 4분할 ▾")
             self.btn_layout_menu.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             self.btn_layout_menu.setToolTip("화면 분할 레이아웃 전환 및 창 비율 균등화")
             self.btn_layout_menu.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -3672,7 +5532,7 @@ def run_pyqt6_app() -> None:
             cmd_tb.addWidget(self.btn_layout_menu)
 
             self.btn_drive_menu = QToolButton()
-            self.btn_drive_menu.setText("💽 드라이브 ▼")
+            self.btn_drive_menu.setText("💽 드라이브 ▾")
             self.btn_drive_menu.setToolTip("연결된 모든 드라이브(C:, D:, G: 등) 목록과 남은 용량을 보고 이동합니다")
             self.btn_drive_menu.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
             self.drive_menu = QMenu(self.btn_drive_menu)
@@ -3706,9 +5566,17 @@ def run_pyqt6_app() -> None:
 
             self.addToolBarBreak(Qt.ToolBarArea.TopToolBarArea)
             self.fav_tb = QToolBar("즐겨찾기 전용 바")
+            self.fav_tb.setObjectName("FavToolbar")
             self.fav_tb.setMovable(False)
             self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.fav_tb)
             self._rebuild_favorites_bar()
+
+            self.addToolBarBreak(Qt.ToolBarArea.TopToolBarArea)
+            self.mobile_switcher_tb = QToolBar("모바일 패널 스위처 바")
+            self.mobile_switcher_tb.setObjectName("MobileSwitcherBar")
+            self.mobile_switcher_tb.setMovable(False)
+            self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.mobile_switcher_tb)
+            self.mobile_switcher_tb.hide()
 
             central = QWidget()
             central_layout = QHBoxLayout(central)
@@ -3785,12 +5653,50 @@ def run_pyqt6_app() -> None:
         def _refresh_toolbar_icons(self) -> None:
             dm = self.dark_mode
             self.btn_new.setIcon(create_ui_icon("new", dm, 20))
+            self.btn_archive.setIcon(create_ui_icon("archive", dm, 20))
             self.btn_del.setIcon(create_ui_icon("delete", dm, 20))
             self.btn_sort.setIcon(create_ui_icon("sort", dm, 20))
             self.btn_view.setIcon(create_ui_icon("view", dm, 20))
             self.btn_layout_menu.setIcon(create_ui_icon("layout", dm, 20))
             self.btn_preview_toggle.setIcon(create_ui_icon("preview", dm, 20))
             self.btn_details_toggle.setIcon(create_ui_icon("details", dm, 20))
+
+        def _populate_archive_menu(self) -> None:
+            self.archive_menu.clear()
+            t = self.active_pane().current_tab()
+            sel = t.selected_file_paths() if t else []
+            if not sel or t is None:
+                act_empty = self.archive_menu.addAction("⚠️ 먼저 압축하거나 해제할 파일/폴더를 선택하세요")
+                act_empty.setEnabled(False)
+                return
+
+            first_name = Path(sel[0]).stem or Path(sel[0]).name or "archive"
+            quick_zip = f"{first_name}.zip" if len(sel) == 1 else f"{Path(t.current_path).name or '묶음압축'}.zip"
+            self.archive_menu.addSection(f"🗜️ 선택 항목 ({len(sel)}개) 압축하기")
+            act_qzip = self.archive_menu.addAction(f"⚡ '{quick_zip}'(으)로 즉시 압축")
+            act_qzip.triggered.connect(lambda: t.quick_compress_selected("zip"))
+            act_qtgz = self.archive_menu.addAction(f"⚡ '{Path(quick_zip).stem}.tar.gz'(으)로 즉시 압축")
+            act_qtgz.triggered.connect(lambda: t.quick_compress_selected("tar.gz"))
+            act_cdlg = self.archive_menu.addAction("🗜️ 압축 파일 이름/포맷 지정하여 압축... (Alt+F5)")
+            act_cdlg.triggered.connect(t.compress_selected_interactive)
+
+            archives = [p for p in sel if is_archive_file(p)]
+            if archives:
+                self.archive_menu.addSeparator()
+                self.archive_menu.addSection(f"📂 압축 파일 ({len(archives)}개) 풀기")
+                stem_sub = strip_archive_stem(archives[0])
+                act_ex_sub = self.archive_menu.addAction(f"📂 '{stem_sub}/' 하위 폴더에 압축 풀기 (권장, Alt+F6)")
+                act_ex_sub.triggered.connect(lambda: t.extract_selected_archive(create_subfolder=True))
+                act_ex_here = self.archive_menu.addAction("📥 현재 폴더에 바로 압축 풀기")
+                act_ex_here.triggered.connect(lambda: t.extract_selected_archive(create_subfolder=False))
+
+                ex_pane_sub = self.archive_menu.addMenu("📑 다른 패널(1~4번 창)로 압축 풀기")
+                for idx, pane in enumerate(self.panes):
+                    dest = pane.current_path()
+                    act_ep = ex_pane_sub.addAction(f"📂 [{idx + 1}번 창]으로 풀기 ({Path(dest).name or dest})")
+                    act_ep.triggered.connect(
+                        lambda checked=False, d=dest: t.extract_selected_archive(dest_override=d, create_subfolder=True)
+                    )
 
         def _populate_send_menu(self) -> None:
             self.send_menu.clear()
@@ -3907,14 +5813,23 @@ def run_pyqt6_app() -> None:
                 ("3_top", "3분할 (상1·하2)", "Ctrl+5"),
                 ("single", "1분할 (단일 최대화)", "Ctrl+6"),
             ]
-            for mode_key, text, shortcut_str in layouts_meta:
+            for mode_key, text_lbl, shortcut_str in layouts_meta:
                 prefix = "● " if getattr(self, "current_layout_mode", "quad") == mode_key else "    "
-                act = self.layout_menu.addAction(f"{prefix}{text}\t{shortcut_str}")
-                act.triggered.connect(lambda checked=False, m=mode_key: self.set_layout_mode(m))
+                act = self.layout_menu.addAction(f"{prefix}{text_lbl}\t{shortcut_str}")
+                act.triggered.connect(lambda checked=False, m=mode_key: self.set_layout_mode(m, remember_desktop=True))
 
             self.layout_menu.addSeparator()
             act_eq = self.layout_menu.addAction("⚖️ 분할 창 비율 균등 정렬")
             act_eq.triggered.connect(self.equalize_splitters)
+
+            self.layout_menu.addSeparator()
+            self.layout_menu.addSection("📱 원격/모바일 해상도 프리셋 전환")
+            act_p360 = self.layout_menu.addAction("📱 모바일 세로 (360×680px — 1분할 + #1~#4 스위처)")
+            act_p360.triggered.connect(lambda: self.apply_viewport_preset("mobile_360"))
+            act_p780 = self.layout_menu.addAction("📲 모바일 가로 (780×520px — 좌/우 2분할 + 페어 토글)")
+            act_p780.triggered.connect(lambda: self.apply_viewport_preset("mobile_780"))
+            act_p1520 = self.layout_menu.addAction("🖥️ 데스크톱 표준 (1520×940px — 4분할 전체 복원)")
+            act_p1520.triggered.connect(lambda: self.apply_viewport_preset("desktop_1520"))
 
         def _populate_drive_menu(self) -> None:
             self.drive_menu.clear()
@@ -3949,16 +5864,62 @@ def run_pyqt6_app() -> None:
 
         def _rebuild_favorites_bar(self) -> None:
             self.fav_tb.clear()
+            self.fav_tb.setObjectName("FavToolbar")
+
+            if self.dark_mode:
+                tb_style = (
+                    "QToolBar#FavToolbar { background-color: #1E293B; border-bottom: 1px solid #334155; "
+                    "spacing: 6px; padding: 4px 8px; }"
+                )
+                lbl_style = (
+                    "color: #FBBF24; background: transparent; font-weight: 700; font-size: 12px; padding: 2px 6px;"
+                )
+                item_btn_style = (
+                    "QToolButton { background-color: #0F172A; color: #F8FAFC; border: 1px solid #334155; "
+                    "border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 12px; } "
+                    "QToolButton:hover { background-color: #2563EB; color: #FFFFFF; border: 1px solid #3B82F6; } "
+                    "QToolButton:pressed { background-color: #1D4ED8; color: #FFFFFF; }"
+                )
+                act_btn_style = (
+                    "QToolButton { background-color: #1E3A8A; color: #F8FAFC; border: 1px solid #3B82F6; "
+                    "border-radius: 6px; padding: 4px 10px; font-weight: 700; font-size: 12px; } "
+                    "QToolButton:hover { background-color: #2563EB; color: #FFFFFF; border: 1px solid #60A5FA; }"
+                )
+            else:
+                tb_style = (
+                    "QToolBar#FavToolbar { background-color: #F1F5F9; border-bottom: 1px solid #CBD5E1; "
+                    "spacing: 6px; padding: 4px 8px; }"
+                )
+                lbl_style = (
+                    "color: #0F172A; background: transparent; font-weight: 700; font-size: 12px; padding: 2px 6px;"
+                )
+                item_btn_style = (
+                    "QToolButton { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; "
+                    "border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 12px; } "
+                    "QToolButton:hover { background-color: #2563EB; color: #FFFFFF; border: 1px solid #1D4ED8; } "
+                    "QToolButton:pressed { background-color: #1E40AF; color: #FFFFFF; }"
+                )
+                act_btn_style = (
+                    "QToolButton { background-color: #EFF6FF; color: #1D4ED8; border: 1px solid #93C5FD; "
+                    "border-radius: 6px; padding: 4px 10px; font-weight: 700; font-size: 12px; } "
+                    "QToolButton:hover { background-color: #2563EB; color: #FFFFFF; border: 1px solid #1D4ED8; }"
+                )
+
+            self.fav_tb.setStyleSheet(tb_style)
 
             lbl_fav = QLabel("  ⭐ 즐겨찾기: ")
-            lbl_fav.setStyleSheet("font-weight: bold;")
+            lbl_fav.setObjectName("FavTitleLabel")
+            lbl_fav.setStyleSheet(lbl_style)
             self.fav_tb.addWidget(lbl_fav)
 
             for idx, fav in enumerate(self.favorites):
                 name = fav.get("name", "폴더")
                 path = fav.get("path", "")
                 btn = QToolButton()
+                btn.setObjectName("FavItemButton")
                 btn.setText(name)
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.setStyleSheet(item_btn_style)
                 btn.setToolTip(
                     f"{path}\n• 좌클릭: 현재 활성 탭에서 이동\n• 우클릭: 새 탭으로 열기 또는 즐겨찾기 삭제"
                 )
@@ -3971,13 +5932,19 @@ def run_pyqt6_app() -> None:
 
             self.fav_tb.addSeparator()
             btn_add_curr = QToolButton()
+            btn_add_curr.setObjectName("FavActionBtn")
             btn_add_curr.setText("➕ 현재 폴더 추가")
+            btn_add_curr.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_add_curr.setStyleSheet(act_btn_style)
             btn_add_curr.setToolTip("현재 활성 패널의 폴더를 즐겨찾기 바에 즉시 추가합니다")
             btn_add_curr.clicked.connect(lambda: self.add_favorite(self.active_pane().current_path()))
             self.fav_tb.addWidget(btn_add_curr)
 
             btn_manage_fav = QToolButton()
+            btn_manage_fav.setObjectName("FavActionBtn")
             btn_manage_fav.setText("⚙️ 즐겨찾기 편집")
+            btn_manage_fav.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_manage_fav.setStyleSheet(act_btn_style)
             btn_manage_fav.setToolTip("즐겨찾기 폴더 목록을 추가·이름변경·순서조정·삭제합니다")
             btn_manage_fav.clicked.connect(self._open_favorites_dialog)
             self.fav_tb.addWidget(btn_manage_fav)
@@ -4095,12 +6062,15 @@ def run_pyqt6_app() -> None:
             QShortcut(QKeySequence("Alt+Left"), self, activated=self._shortcut_back)
             QShortcut(QKeySequence("Alt+Right"), self, activated=self._shortcut_forward)
             QShortcut(QKeySequence("Alt+Up"), self, activated=self._shortcut_up)
+            QShortcut(QKeySequence("Alt+F5"), self, activated=self._shortcut_compress)
+            QShortcut(QKeySequence("Alt+F6"), self, activated=self._shortcut_extract)
 
         def active_pane(self) -> ExplorerPane:
             return self.panes[self.active_pane_index]
 
         def _set_active_pane(self, index: int) -> None:
             if 0 <= index < len(self.panes):
+                changed = index != self.active_pane_index
                 self.active_pane_index = index
                 for i, p in enumerate(self.panes):
                     p.set_active_visual(i == index)
@@ -4108,7 +6078,8 @@ def run_pyqt6_app() -> None:
                 if t and self.inspector_pane.isVisible():
                     sel = t.selected_file_paths()
                     self.inspector_pane.inspect_path(sel[0] if sel else t.current_path)
-                self.save_config()
+                if changed:
+                    self.save_config()
 
         def _on_top_splitter_moved(self, pos: int, index: int) -> None:
             if self._syncing_splitters or self.current_layout_mode != "quad":
@@ -4132,8 +6103,235 @@ def run_pyqt6_app() -> None:
             finally:
                 self._syncing_splitters = False
 
-        def set_layout_mode(self, mode: str) -> None:
+        def resizeEvent(self, event) -> None:
+            super().resizeEvent(event)
+            if not getattr(self, "_is_initializing", False):
+                self._apply_responsive_viewport(self.width())
+
+        def _classify_viewport_tier(self, width_px: int) -> str:
+            if width_px <= 520:
+                return "mobile_portrait"
+            if width_px <= 860:
+                return "mobile_landscape"
+            return "desktop"
+
+        def _apply_responsive_viewport(self, width_px: int, force: bool = False) -> None:
+            new_tier = self._classify_viewport_tier(width_px)
+            tier_changed = (new_tier != self.viewport_tier) or force
+            self.viewport_tier = new_tier
+            if not tier_changed:
+                return
+
+            central_lay = self.centralWidget().layout() if self.centralWidget() else None
+            if central_lay is not None:
+                if new_tier == "mobile_portrait":
+                    central_lay.setContentsMargins(2, 2, 2, 2)
+                    central_lay.setSpacing(2)
+                elif new_tier == "mobile_landscape":
+                    central_lay.setContentsMargins(3, 3, 3, 3)
+                    central_lay.setSpacing(4)
+                else:
+                    central_lay.setContentsMargins(6, 6, 6, 6)
+                    central_lay.setSpacing(6)
+
+            prev_init = self._is_initializing
+            self._is_initializing = True
+            try:
+                if new_tier == "mobile_portrait":
+                    if self.inspector_pane.isVisible():
+                        self.close_inspector_pane()
+                    self.fav_tb.hide()
+                    self._set_toolbar_compact_mode("mobile_portrait")
+                    self.set_layout_mode("single", remember_desktop=False)
+                    self._rebuild_mobile_switcher_bar()
+                    self.mobile_switcher_tb.show()
+                elif new_tier == "mobile_landscape":
+                    if self.inspector_pane.isVisible() and width_px < 760:
+                        self.close_inspector_pane()
+                    self.fav_tb.hide()
+                    self._set_toolbar_compact_mode("mobile_landscape")
+                    self.landscape_pair_index = 1 if self.active_pane_index >= 2 else 0
+                    self.set_layout_mode("2h", remember_desktop=False)
+                    self._rebuild_mobile_switcher_bar()
+                    self.mobile_switcher_tb.show()
+                else:
+                    self.mobile_switcher_tb.hide()
+                    self.fav_tb.show()
+                    self._set_toolbar_compact_mode("desktop")
+                    restore_mode = self.preferred_desktop_layout or "quad"
+                    self.set_layout_mode(restore_mode, remember_desktop=False)
+            finally:
+                self._is_initializing = prev_init
+
+            for pane in self.panes:
+                pane.apply_responsive_mode(new_tier)
+
+        def _set_toolbar_compact_mode(self, tier: str) -> None:
+            if tier == "mobile_portrait":
+                self.cmd_tb.setIconSize(QSize(16, 16))
+                self.btn_new.setText("+")
+                self.btn_new.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+                self.act_cut.setText("✂️")
+                self.act_copy.setText("📋")
+                self.act_paste.setText("📥")
+                self.act_rename.setText("✏️")
+                self.btn_send.setText("📤")
+                self.btn_archive.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+                self.btn_del.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+                self.btn_sort.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+                self.btn_view.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+                self.btn_layout_menu.setText("📐")
+                self.btn_layout_menu.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+                self.btn_drive_menu.setText("💽")
+                self.btn_preview_toggle.hide()
+                self.btn_details_toggle.hide()
+                self.btn_theme.setText("🌙" if self.dark_mode else "☀️")
+            elif tier == "mobile_landscape":
+                self.cmd_tb.setIconSize(QSize(18, 18))
+                self.btn_new.setText("생성▾")
+                self.btn_new.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                self.act_cut.setText("✂️이동")
+                self.act_copy.setText("📋복사")
+                self.act_paste.setText("📥붙임")
+                self.act_rename.setText("✏️이름")
+                self.btn_send.setText("📤전송▾")
+                self.btn_archive.setText("압축▾")
+                self.btn_archive.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                self.btn_del.setText("삭제")
+                self.btn_del.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+                self.btn_sort.setText("정렬▾")
+                self.btn_sort.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                self.btn_view.setText("보기▾")
+                self.btn_view.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                self.btn_layout_menu.setText("화면▾")
+                self.btn_layout_menu.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                self.btn_drive_menu.setText("💽▾")
+                self.btn_preview_toggle.show()
+                self.btn_details_toggle.show()
+                self.btn_preview_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+                self.btn_details_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+                self.btn_theme.setText("🌙" if self.dark_mode else "☀️")
+            else:
+                self.cmd_tb.setIconSize(QSize(20, 20))
+                self.btn_new.setText("새로 만들기 ▾")
+                self.btn_new.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                self.act_cut.setText("✂️ 잘라내기")
+                self.act_copy.setText("📋 복사")
+                self.act_paste.setText("📥 붙여넣기")
+                self.act_rename.setText("✏️ 이름 바꾸기")
+                self.btn_send.setText("📤 다른 패널로 전송 ▾")
+                self.btn_archive.setText("압축/해제 ▾")
+                self.btn_archive.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                self.btn_del.setText("삭제")
+                self.btn_del.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                self.btn_sort.setText("정렬 ▾")
+                self.btn_sort.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                self.btn_view.setText("보기 ▾")
+                self.btn_view.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                self.btn_layout_menu.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                self.btn_drive_menu.setText("💽 드라이브 ▾")
+                self.btn_preview_toggle.show()
+                self.btn_details_toggle.show()
+                self.btn_preview_toggle.setText("미리 보기")
+                self.btn_preview_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                self.btn_details_toggle.setText("세부 정보")
+                self.btn_details_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                self.btn_theme.setText("🌙 다크" if self.dark_mode else "☀️ 라이트")
+
+        def _rebuild_mobile_switcher_bar(self) -> None:
+            self.mobile_switcher_tb.clear()
+            if self.dark_mode:
+                sw_btn_style = (
+                    "QToolButton { background-color: #0F172A; color: #F8FAFC; border: 1px solid #334155; "
+                    "border-radius: 5px; padding: 3px 8px; font-weight: 600; font-size: 11px; } "
+                    "QToolButton:checked { background-color: #2563EB; color: #FFFFFF; border: 1px solid #60A5FA; }"
+                )
+                lbl_style = "color: #FBBF24; font-weight: bold; font-size: 11px; padding: 0 4px;"
+            else:
+                sw_btn_style = (
+                    "QToolButton { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; "
+                    "border-radius: 5px; padding: 3px 8px; font-weight: 600; font-size: 11px; } "
+                    "QToolButton:checked { background-color: #2563EB; color: #FFFFFF; border: 1px solid #1D4ED8; }"
+                )
+                lbl_style = "color: #0F172A; font-weight: bold; font-size: 11px; padding: 0 4px;"
+
+            if self.viewport_tier == "mobile_portrait":
+                lbl = QLabel(" 📱창:")
+                lbl.setStyleSheet(lbl_style)
+                self.mobile_switcher_tb.addWidget(lbl)
+                for idx in range(4):
+                    folder_name = Path(self.panes[idx].current_path()).name or self.panes[idx].current_path()
+                    short_f = folder_name if len(folder_name) <= 5 else folder_name[:4] + "…"
+                    btn = QToolButton()
+                    btn.setText(f"#{idx + 1} {short_f}")
+                    btn.setToolTip(f"{idx + 1}번 창: {self.panes[idx].current_path()}")
+                    btn.setCheckable(True)
+                    btn.setChecked(self.active_pane_index == idx)
+                    btn.setStyleSheet(sw_btn_style)
+                    btn.clicked.connect(lambda checked=False, i=idx: self._switch_mobile_single_pane(i))
+                    self.mobile_switcher_tb.addWidget(btn)
+            elif self.viewport_tier == "mobile_landscape":
+                lbl = QLabel(" 📲2분할:")
+                lbl.setStyleSheet(lbl_style)
+                self.mobile_switcher_tb.addWidget(lbl)
+
+                btn_pair_0 = QToolButton()
+                btn_pair_0.setText("[1·2번 창 보기]")
+                btn_pair_0.setCheckable(True)
+                btn_pair_0.setChecked(self.landscape_pair_index == 0 and self.current_layout_mode == "2h")
+                btn_pair_0.setStyleSheet(sw_btn_style)
+                btn_pair_0.clicked.connect(lambda: self._switch_landscape_pane_pair(0))
+                self.mobile_switcher_tb.addWidget(btn_pair_0)
+
+                btn_pair_1 = QToolButton()
+                btn_pair_1.setText("[3·4번 창 보기]")
+                btn_pair_1.setCheckable(True)
+                btn_pair_1.setChecked(self.landscape_pair_index == 1 and self.current_layout_mode == "2h")
+                btn_pair_1.setStyleSheet(sw_btn_style)
+                btn_pair_1.clicked.connect(lambda: self._switch_landscape_pane_pair(1))
+                self.mobile_switcher_tb.addWidget(btn_pair_1)
+
+                self.mobile_switcher_tb.addSeparator()
+                for idx in range(4):
+                    btn_p = QToolButton()
+                    btn_p.setText(f"#{idx + 1} 최대화")
+                    btn_p.setCheckable(True)
+                    btn_p.setChecked(self.current_layout_mode == "single" and self.active_pane_index == idx)
+                    btn_p.setStyleSheet(sw_btn_style)
+                    btn_p.clicked.connect(lambda checked=False, i=idx: self._switch_mobile_single_pane(i))
+                    self.mobile_switcher_tb.addWidget(btn_p)
+
+        def _switch_mobile_single_pane(self, pane_idx: int) -> None:
+            self._set_active_pane(pane_idx)
+            self.set_layout_mode("single", remember_desktop=False)
+            self._rebuild_mobile_switcher_bar()
+
+        def _switch_landscape_pane_pair(self, pair_idx: int) -> None:
+            self.landscape_pair_index = pair_idx
+            self._set_active_pane(pair_idx * 2)
+            self.set_layout_mode("2h", remember_desktop=False)
+            self._rebuild_mobile_switcher_bar()
+
+        def apply_viewport_preset(self, preset_key: str) -> None:
+            if self.isMaximized():
+                self.showNormal()
+            if preset_key == "mobile_360":
+                self.resize(360, 680)
+                self._apply_responsive_viewport(360, force=True)
+                self.show_status_message("📱 모바일 세로(360×680px) 프리셋 적용 — 1분할 및 #1~#4 빠른 패널 스위처 활성화", 4000)
+            elif preset_key == "mobile_780":
+                self.resize(780, 520)
+                self._apply_responsive_viewport(780, force=True)
+                self.show_status_message("📲 모바일 가로(780×520px) 프리셋 적용 — 좌/우 2분할 및 [1·2번]↔[3·4번] 스위처 활성화", 4000)
+            else:
+                self.resize(1520, 940)
+                self._apply_responsive_viewport(1520, force=True)
+                self.show_status_message("🖥️ 데스크톱(1520×940px) 프리셋 적용 — 4분할(Quad) 및 전체 컬럼 복원", 4000)
+
+        def set_layout_mode(self, mode: str, remember_desktop: bool = True) -> None:
             self.current_layout_mode = mode
+            if remember_desktop and getattr(self, "viewport_tier", "desktop") == "desktop":
+                self.preferred_desktop_layout = mode
             short_names = {
                 "quad": "4분할(2×2)",
                 "2h": "2분할(좌/우)",
@@ -4142,7 +6340,13 @@ def run_pyqt6_app() -> None:
                 "3_top": "3분할(상1·하2)",
                 "single": "1분할(단일)",
             }
-            self.btn_layout_menu.setText(f"레이아웃: {short_names.get(mode, '4분할')} ▼")
+            v_tier = getattr(self, "viewport_tier", "desktop")
+            if v_tier == "mobile_portrait":
+                self.btn_layout_menu.setText("📐")
+            elif v_tier == "mobile_landscape":
+                self.btn_layout_menu.setText("화면▾")
+            else:
+                self.btn_layout_menu.setText(f"레이아웃: {short_names.get(mode, '4분할')} ▾")
             self._populate_layout_menu()
 
             for p in self.panes:
@@ -4170,10 +6374,12 @@ def run_pyqt6_app() -> None:
 
             elif mode == "2h":
                 self.main_splitter.setOrientation(Qt.Orientation.Horizontal)
-                self.main_splitter.addWidget(self.panes[0])
-                self.main_splitter.addWidget(self.panes[1])
-                self.panes[0].show()
-                self.panes[1].show()
+                idx_a = 2 if (v_tier == "mobile_landscape" and getattr(self, "landscape_pair_index", 0) == 1) else 0
+                idx_b = idx_a + 1
+                self.main_splitter.addWidget(self.panes[idx_a])
+                self.main_splitter.addWidget(self.panes[idx_b])
+                self.panes[idx_a].show()
+                self.panes[idx_b].show()
 
             elif mode == "2v":
                 self.main_splitter.setOrientation(Qt.Orientation.Vertical)
@@ -4356,6 +6562,16 @@ def run_pyqt6_app() -> None:
             if t:
                 t.go_forward()
 
+        def _shortcut_compress(self) -> None:
+            t = self.active_pane().current_tab()
+            if t:
+                t.compress_selected_interactive()
+
+        def _shortcut_extract(self) -> None:
+            t = self.active_pane().current_tab()
+            if t:
+                t.extract_selected_archive(create_subfolder=True)
+
         def keyPressEvent(self, event) -> None:
             if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 t = self.active_pane().current_tab()
@@ -4368,59 +6584,108 @@ def run_pyqt6_app() -> None:
         def _apply_theme(self) -> None:
             if self.dark_mode:
                 qss = """
-                QMainWindow, QDialog { background-color: #0F172A; color: #E2E8F0; }
-                QToolBar { background-color: #1E293B; border-bottom: 1px solid #334155; spacing: 5px; padding: 4px; }
-                QToolButton { background-color: transparent; color: #E2E8F0; border: 1px solid transparent; border-radius: 5px; padding: 5px 9px; font-size: 13px; }
-                QToolButton:hover { background-color: #334155; border: 1px solid #475569; }
+                QMainWindow, QDialog { background-color: #0B1120; color: #F8FAFC; }
+                QLabel, QCheckBox, QRadioButton { color: #F8FAFC; background: transparent; }
+                QToolBar { background-color: #1E293B; border-bottom: 1px solid #334155; spacing: 5px; padding: 4px 6px; }
+                QToolBar#FavToolbar QLabel#FavTitleLabel { color: #FBBF24; font-weight: 700; font-size: 12px; }
+                QToolBar#FavToolbar QToolButton#FavItemButton { background-color: #0F172A; color: #F8FAFC; border: 1px solid #334155; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 12px; }
+                QToolBar#FavToolbar QToolButton#FavItemButton:hover { background-color: #2563EB; color: #FFFFFF; border: 1px solid #3B82F6; }
+                QToolBar#FavToolbar QToolButton#FavActionBtn { background-color: #1E3A8A; color: #F8FAFC; border: 1px solid #3B82F6; border-radius: 6px; padding: 4px 10px; font-weight: 700; font-size: 12px; }
+                QToolButton { background-color: transparent; color: #F8FAFC; border: 1px solid transparent; border-radius: 6px; padding: 5px 9px; font-size: 12px; font-weight: 600; }
+                QToolButton:hover { background-color: #334155; border: 1px solid #475569; color: #FFFFFF; }
                 QToolButton:checked { background-color: #2563EB; color: #FFFFFF; font-weight: bold; }
                 QToolButton::menu-indicator { image: none; width: 0px; }
-                QFrame#ExplorerPane, QFrame#InspectorPane { background-color: #1E293B; border: 2px solid #334155; border-radius: 7px; }
-                QFrame#ExplorerPane[activePane="true"] { border: 2px solid #38BDF8; }
-                QLabel#PaneBadge { background-color: #2563EB; color: #FFFFFF; font-weight: bold; border-radius: 4px; padding: 1px 5px; }
-                QLabel#PaneTitlePath, QLabel#PaneSummaryLabel { color: #94A3B8; font-size: 11px; padding: 2px 4px; }
-                QLineEdit, QPlainTextEdit, QTextBrowser { background-color: #0F172A; color: #F8FAFC; border: 1px solid #475569; border-radius: 4px; padding: 4px 6px; selection-background-color: #2563EB; font-size: 12px; }
-                QLineEdit:focus { border: 1px solid #38BDF8; }
-                QTabWidget::pane { border: 1px solid #334155; background-color: #0F172A; }
-                QTabBar::tab { background-color: #1E293B; color: #94A3B8; border: 1px solid #334155; border-bottom: none; border-top-left-radius: 5px; border-top-right-radius: 5px; padding: 5px 10px; margin-right: 2px; font-size: 12px; }
-                QTabBar::tab:selected { background-color: #0F172A; color: #38BDF8; font-weight: bold; }
-                QTableWidget, QListWidget { background-color: #0F172A; alternate-background-color: #131D31; color: #E2E8F0; border: none; selection-background-color: #1D4ED8; selection-color: #FFFFFF; font-size: 12px; }
-                QHeaderView::section { background-color: #1E293B; color: #CBD5E1; border: none; border-right: 1px solid #334155; border-bottom: 1px solid #334155; padding: 4px 6px; font-weight: bold; }
+                QFrame#ExplorerPane, QFrame#InspectorPane { background-color: #1E293B; color: #F8FAFC; border: 1px solid #334155; border-radius: 8px; }
+                QFrame#ExplorerPane[activePane="true"] { border: 2px solid #38BDF8; background-color: #1E293B; }
+                QFrame#InspectorPane QLabel#InspectorTitleLabel { color: #38BDF8; font-weight: 700; font-size: 13px; background: transparent; }
+                QFrame#InspectorPane QLabel#InspectorPreviewLabel { color: #E2E8F0; background-color: #0F172A; border: 1px solid #334155; border-radius: 6px; padding: 6px; }
+                QFrame#InspectorPane QLabel#InspectorMetaLabel { color: #F8FAFC; background-color: #0F172A; border: 1px solid #334155; border-radius: 6px; padding: 8px; font-size: 12px; }
+                QLabel#PaneBadge { background-color: #2563EB; color: #FFFFFF; font-weight: bold; border-radius: 4px; padding: 1px 6px; }
+                QLabel#PaneTitlePath, QLabel#PaneSummaryLabel { color: #E2E8F0; font-size: 11px; padding: 2px 4px; background: transparent; }
+                QLineEdit, QPlainTextEdit, QTextBrowser { background-color: #0F172A; color: #F8FAFC; border: 1px solid #475569; border-radius: 6px; padding: 4px 8px; selection-background-color: #2563EB; selection-color: #FFFFFF; font-size: 12px; }
+                QLineEdit:focus { border: 1px solid #38BDF8; background-color: #0B1120; color: #FFFFFF; }
+                QTabWidget, QTabWidget::tab-bar, QTabBar { background-color: #0F172A; border: none; }
+                QTabWidget::pane { border: 1px solid #334155; background-color: #0F172A; border-radius: 4px; }
+                QTabBar::tab { background-color: #0F172A; color: #CBD5E1; border: 1px solid #334155; border-bottom: none; border-top-left-radius: 6px; border-top-right-radius: 6px; padding: 5px 10px; margin-right: 2px; font-size: 12px; font-weight: 600; }
+                QTabBar::tab:hover { background-color: #1E293B; color: #FFFFFF; }
+                QTabBar::tab:selected { background-color: #1E3A8A; color: #FFFFFF; border: 1px solid #38BDF8; border-top: 3px solid #38BDF8; border-bottom: 2px solid #38BDF8; font-weight: 700; }
+                QTabBar QToolButton { background-color: #1E293B; color: #F8FAFC; border: 1px solid #475569; border-radius: 3px; }
+                QTableWidget, QListWidget { background-color: #0F172A; alternate-background-color: #131C31; color: #F8FAFC; border: none; selection-background-color: #2563EB; selection-color: #FFFFFF; font-size: 12px; outline: none; }
+                QTableWidget::item { padding: 4px 6px; }
+                QTableWidget::item:hover, QListWidget::item:hover { background-color: #1E293B; border-radius: 5px; }
+                QTableWidget::item:selected, QListWidget::item:selected { background-color: #2563EB; color: #FFFFFF; border-radius: 5px; }
+                QHeaderView::section { background-color: #1E293B; color: #E2E8F0; border: none; border-right: 1px solid #334155; border-bottom: 1px solid #334155; padding: 6px 8px; font-weight: bold; font-size: 12px; }
                 QSplitter::handle { background-color: #334155; }
                 QSplitter::handle:hover { background-color: #38BDF8; }
-                QStatusBar { background-color: #1E293B; color: #CBD5E1; border-top: 1px solid #334155; }
+                QScrollBar:vertical { background: #0F172A; width: 8px; margin: 2px 1px; }
+                QScrollBar::handle:vertical { background: #475569; min-height: 28px; border-radius: 4px; }
+                QScrollBar::handle:vertical:hover { background: #64748B; }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+                QScrollBar:horizontal { background: #0F172A; height: 8px; margin: 1px 2px; }
+                QScrollBar::handle:horizontal { background: #475569; min-width: 28px; border-radius: 4px; }
+                QScrollBar::handle:horizontal:hover { background: #64748B; }
+                QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }
+                QStatusBar { background-color: #1E293B; color: #F8FAFC; border-top: 1px solid #334155; }
                 QMenu { background-color: #1E293B; color: #F8FAFC; border: 1px solid #475569; padding: 4px; font-size: 12px; }
                 QMenu::item { padding: 5px 22px 5px 12px; border-radius: 4px; }
                 QMenu::item:selected { background-color: #2563EB; color: #FFFFFF; }
                 """
             else:
                 qss = """
-                QMainWindow, QDialog { background-color: #F1F5F9; color: #0F172A; }
-                QToolBar { background-color: #FFFFFF; border-bottom: 1px solid #CBD5E1; spacing: 5px; padding: 4px; }
-                QToolButton { background-color: transparent; color: #1E293B; border: 1px solid transparent; border-radius: 5px; padding: 5px 9px; font-size: 13px; }
+                QMainWindow, QDialog { background-color: #E2E8F0; color: #0F172A; }
+                QLabel, QCheckBox, QRadioButton { color: #0F172A; background: transparent; }
+                QToolBar { background-color: #FFFFFF; border-bottom: 1px solid #CBD5E1; spacing: 5px; padding: 4px 6px; }
+                QToolBar#FavToolbar QLabel#FavTitleLabel { color: #0F172A; font-weight: 700; font-size: 12px; }
+                QToolBar#FavToolbar QToolButton#FavItemButton { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 12px; }
+                QToolBar#FavToolbar QToolButton#FavItemButton:hover { background-color: #2563EB; color: #FFFFFF; border: 1px solid #1D4ED8; }
+                QToolBar#FavToolbar QToolButton#FavActionBtn { background-color: #EFF6FF; color: #1E3A8A; border: 1px solid #93C5FD; border-radius: 6px; padding: 4px 10px; font-weight: 700; font-size: 12px; }
+                QToolButton { background-color: transparent; color: #0F172A; border: 1px solid transparent; border-radius: 6px; padding: 5px 9px; font-size: 12px; font-weight: 600; }
                 QToolButton:hover { background-color: #E2E8F0; border: 1px solid #CBD5E1; }
                 QToolButton:checked { background-color: #2563EB; color: #FFFFFF; font-weight: bold; }
                 QToolButton::menu-indicator { image: none; width: 0px; }
-                QFrame#ExplorerPane, QFrame#InspectorPane { background-color: #FFFFFF; border: 2px solid #CBD5E1; border-radius: 7px; }
-                QFrame#ExplorerPane[activePane="true"] { border: 2px solid #2563EB; }
-                QLabel#PaneBadge { background-color: #2563EB; color: #FFFFFF; font-weight: bold; border-radius: 4px; padding: 1px 5px; }
-                QLabel#PaneTitlePath, QLabel#PaneSummaryLabel { color: #475569; font-size: 11px; padding: 2px 4px; }
-                QLineEdit, QPlainTextEdit, QTextBrowser { background-color: #F8FAFC; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
-                QLineEdit:focus { border: 1px solid #2563EB; }
-                QTabWidget::pane { border: 1px solid #CBD5E1; background-color: #FFFFFF; }
-                QTabBar::tab { background-color: #E2E8F0; color: #475569; border: 1px solid #CBD5E1; border-bottom: none; border-top-left-radius: 5px; border-top-right-radius: 5px; padding: 5px 10px; margin-right: 2px; font-size: 12px; }
-                QTabBar::tab:selected { background-color: #FFFFFF; color: #1D4ED8; font-weight: bold; }
-                QTableWidget, QListWidget { background-color: #FFFFFF; alternate-background-color: #F8FAFC; color: #0F172A; border: none; selection-background-color: #2563EB; selection-color: #FFFFFF; font-size: 12px; }
-                QHeaderView::section { background-color: #F1F5F9; color: #334155; border: none; border-right: 1px solid #CBD5E1; border-bottom: 1px solid #CBD5E1; padding: 4px 6px; font-weight: bold; }
+                QFrame#ExplorerPane, QFrame#InspectorPane { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 8px; }
+                QFrame#ExplorerPane[activePane="true"] { border: 2px solid #2563EB; background-color: #FFFFFF; }
+                QFrame#InspectorPane QLabel#InspectorTitleLabel { color: #1E3A8A; font-weight: 700; font-size: 13px; background: transparent; }
+                QFrame#InspectorPane QLabel#InspectorPreviewLabel { color: #1E293B; background-color: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 6px; padding: 6px; }
+                QFrame#InspectorPane QLabel#InspectorMetaLabel { color: #0F172A; background-color: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; font-size: 12px; }
+                QLabel#PaneBadge { background-color: #2563EB; color: #FFFFFF; font-weight: bold; border-radius: 4px; padding: 1px 6px; }
+                QLabel#PaneTitlePath, QLabel#PaneSummaryLabel { color: #1E293B; font-size: 11px; padding: 2px 4px; background: transparent; }
+                QLineEdit, QPlainTextEdit, QTextBrowser { background-color: #FFFFFF; color: #0F172A; border: 1px solid #94A3B8; border-radius: 6px; padding: 4px 8px; selection-background-color: #2563EB; selection-color: #FFFFFF; font-size: 12px; }
+                QLineEdit:focus { border: 1px solid #2563EB; background-color: #FFFFFF; color: #0F172A; }
+                QTabWidget, QTabWidget::tab-bar, QTabBar { background-color: #E2E8F0; border: none; }
+                QTabWidget::pane { border: 1px solid #CBD5E1; background-color: #FFFFFF; border-radius: 4px; }
+                QTabBar::tab { background-color: #E2E8F0; color: #334155; border: 1px solid #CBD5E1; border-bottom: none; border-top-left-radius: 6px; border-top-right-radius: 6px; padding: 5px 10px; margin-right: 2px; font-size: 12px; font-weight: 600; }
+                QTabBar::tab:hover { background-color: #F1F5F9; color: #0F172A; }
+                QTabBar::tab:selected { background-color: #FFFFFF; color: #1E3A8A; border: 1px solid #2563EB; border-top: 3px solid #2563EB; border-bottom: 2px solid #2563EB; font-weight: 700; }
+                QTabBar QToolButton { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 3px; }
+                QTableWidget, QListWidget { background-color: #FFFFFF; alternate-background-color: #F8FAFC; color: #0F172A; border: none; selection-background-color: #2563EB; selection-color: #FFFFFF; font-size: 12px; outline: none; }
+                QTableWidget::item { padding: 4px 6px; }
+                QTableWidget::item:hover, QListWidget::item:hover { background-color: #EFF6FF; border-radius: 5px; }
+                QTableWidget::item:selected, QListWidget::item:selected { background-color: #2563EB; color: #FFFFFF; border-radius: 5px; }
+                QHeaderView::section { background-color: #F1F5F9; color: #1E293B; border: none; border-right: 1px solid #CBD5E1; border-bottom: 1px solid #CBD5E1; padding: 6px 8px; font-weight: bold; font-size: 12px; }
                 QSplitter::handle { background-color: #CBD5E1; }
                 QSplitter::handle:hover { background-color: #2563EB; }
-                QStatusBar { background-color: #FFFFFF; color: #334155; border-top: 1px solid #CBD5E1; }
+                QScrollBar:vertical { background: #F1F5F9; width: 8px; margin: 2px 1px; }
+                QScrollBar::handle:vertical { background: #CBD5E1; min-height: 28px; border-radius: 4px; }
+                QScrollBar::handle:vertical:hover { background: #94A3B8; }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+                QScrollBar:horizontal { background: #F1F5F9; height: 8px; margin: 1px 2px; }
+                QScrollBar::handle:horizontal { background: #CBD5E1; min-width: 28px; border-radius: 4px; }
+                QScrollBar::handle:horizontal:hover { background: #94A3B8; }
+                QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }
+                QStatusBar { background-color: #FFFFFF; color: #1E293B; border-top: 1px solid #CBD5E1; }
                 QMenu { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; padding: 4px; font-size: 12px; }
                 QMenu::item { padding: 5px 22px 5px 12px; border-radius: 4px; }
                 QMenu::item:selected { background-color: #2563EB; color: #FFFFFF; }
                 """
             self.setStyleSheet(qss)
+            if hasattr(self, "inspector_pane"):
+                self.inspector_pane.apply_theme(self.dark_mode)
+            self._rebuild_favorites_bar()
+            if hasattr(self, "mobile_switcher_tb"):
+                self._rebuild_mobile_switcher_bar()
 
-    app = QApplication.instance() or QApplication(sys.argv)
+    app = QApplication(sys.argv)
     app.setApplicationName("PyQuadDir Desktop Explorer")
     font = QFont("Malgun Gothic", 9) if platform.system() == "Windows" else QFont("Sans Serif", 10)
     app.setFont(font)
@@ -4431,6 +6696,15 @@ def run_pyqt6_app() -> None:
         win.showMaximized()
     else:
         win.show()
+    if getattr(sys, "_qdir_self_test_gui", False):
+        def _finish_self_test() -> None:
+            win.equalize_splitters()
+            win._is_initializing = False
+            if is_isolated_profile_active():
+                win.save_config()
+            win.close()
+            app.quit()
+        QTimer.singleShot(180, _finish_self_test)
     sys.exit(app.exec())
 
 
@@ -4502,7 +6776,10 @@ def run_tkinter_app() -> None:
             self.tree.bind("<Return>", self._on_enter_key)
             self.tree.bind("<KP_Enter>", self._on_enter_key)
             self.tree.bind("<BackSpace>", lambda e: self.go_up())
+            self._sweep_anchor_iid: Optional[str] = None
+            self._drag_mode_tk: str = "none"
             self.tree.bind("<ButtonPress-1>", self._on_drag_start)
+            self.tree.bind("<B1-Motion>", self._on_drag_motion)
             self.tree.bind("<ButtonRelease-1>", self._on_drag_drop)
             self.tree.bind("<Button-3>", self._on_right_click)
             self.tree.bind("<Control-a>", self._on_select_all)
@@ -4686,12 +6963,46 @@ def run_tkinter_app() -> None:
 
         def _on_drag_start(self, event) -> None:
             self.app.set_active_pane(self.pane_idx)
-            self.app.drag_source_tab = self
+            clicked_iid = self.tree.identify_row(event.y)
+            current_sel = set(self.tree.selection())
+            if clicked_iid and clicked_iid != "..parent.." and clicked_iid in current_sel:
+                self._drag_mode_tk = "transfer"
+                self.app.drag_source_tab = self
+                return
+            self._drag_mode_tk = "sweep"
+            self.app.drag_source_tab = None
+            all_items = [i for i in self.tree.get_children() if i != "..parent.."]
+            if clicked_iid and clicked_iid != "..parent..":
+                self._sweep_anchor_iid = clicked_iid
+            elif all_items:
+                self._sweep_anchor_iid = all_items[-1] if event.y > 30 else all_items[0]
+            else:
+                self._sweep_anchor_iid = None
+
+        def _on_drag_motion(self, event) -> Optional[str]:
+            if self._drag_mode_tk != "sweep" or not self._sweep_anchor_iid:
+                return None
+            all_items = [i for i in self.tree.get_children() if i != "..parent.."]
+            if self._sweep_anchor_iid not in all_items:
+                return None
+            curr_iid = self.tree.identify_row(event.y)
+            if not curr_iid or curr_iid == "..parent..":
+                curr_iid = all_items[0] if (event.y <= 24 and all_items) else (all_items[-1] if all_items else "")
+            if not curr_iid or curr_iid not in all_items:
+                return None
+            i1, i2 = all_items.index(self._sweep_anchor_iid), all_items.index(curr_iid)
+            lo, hi = min(i1, i2), max(i1, i2)
+            self.tree.selection_set(all_items[lo : hi + 1])
+            self.tree.see(curr_iid)
+            return "break"
 
         def _on_drag_drop(self, event) -> None:
+            mode = getattr(self, "_drag_mode_tk", "none")
+            self._drag_mode_tk = "none"
+            self._sweep_anchor_iid = None
             src_tab = self.app.drag_source_tab
             self.app.drag_source_tab = None
-            if not src_tab:
+            if mode != "transfer" or not src_tab:
                 return
             w = self.winfo_containing(event.x_root, event.y_root)
             if w is None:
@@ -4716,6 +7027,11 @@ def run_tkinter_app() -> None:
             if len(paths) == 1 and os.path.isdir(paths[0]):
                 menu.add_command(label="➕ 새 탭에서 폴더 열기", command=lambda: self.app.add_tab(self.pane_idx, paths[0]))
             if paths:
+                menu.add_command(label="🗜️ 선택 항목 ZIP 압축하기", command=lambda: self._compress_paths_tk(paths))
+                if len(paths) == 1 and is_archive_file(paths[0]):
+                    menu.add_command(label="📂 하위 폴더에 압축 풀기", command=lambda: self._extract_path_tk(paths[0], True))
+                    menu.add_command(label="📥 여기에 바로 압축 풀기", command=lambda: self._extract_path_tk(paths[0], False))
+                menu.add_separator()
                 for i in range(4):
                     dest = self.app.get_pane_current_path(i)
                     menu.add_command(
@@ -4731,6 +7047,23 @@ def run_tkinter_app() -> None:
             menu.add_separator()
             menu.add_command(label="📁 새 폴더 만들기", command=self._new_folder)
             menu.tk_popup(event.x_root, event.y_root)
+
+        def _compress_paths_tk(self, paths: List[str]) -> None:
+            stem = Path(paths[0]).stem if len(paths) == 1 else (Path(self.current_path).name or "Archive")
+            name = simpledialog.askstring("압축하기", "생성할 압축 파일 이름:", initialvalue=f"{stem}.zip")
+            if not name:
+                return
+            out_p = Path(self.current_path) / name.strip()
+            ok, msg, _ = compress_items_to_archive(paths, str(out_p), "zip")
+            self.app.refresh_all()
+            if not ok:
+                messagebox.showwarning("압축 오류", msg)
+
+        def _extract_path_tk(self, arc_path: str, sub: bool) -> None:
+            ok, msg, _ = extract_archive_smart(arc_path, self.current_path, create_subfolder=sub)
+            self.app.refresh_all()
+            if not ok:
+                messagebox.showwarning("압축 해제 오류", msg)
 
         def _new_folder(self) -> None:
             name = simpledialog.askstring("새 폴더", "새 폴더 이름:", initialvalue="새 폴더")
@@ -4757,9 +7090,9 @@ def run_tkinter_app() -> None:
         def __init__(self) -> None:
             self._is_initializing = True
             self.root = tk.Tk()
-            self.root.title("PyQuadDir Desktop Explorer v2.5 (Tkinter Engine)")
+            self.root.title("PyQuadDir Desktop Explorer v3.1 (Tkinter Engine)")
             self.root.geometry("1440x880")
-            self.root.minsize(920, 600)
+            self.root.minsize(320, 420)
 
             self.config = load_app_config()
             self.dark_mode = bool(self.config.get("dark_mode", False))
@@ -4778,20 +7111,29 @@ def run_tkinter_app() -> None:
             self.font_size = 10
             self.style = ttk.Style(self.root)
 
+            self._config_dirty = False
             self._build_ui()
-            self._is_initializing = False
-            self.save_config()
+            self.root.after_idle(self._finish_initial_startup)
             self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-            atexit.register(self.save_config)
+            atexit.register(self._save_config_on_exit)
+
+        def _finish_initial_startup(self) -> None:
+            self._is_initializing = False
+
+        def _save_config_on_exit(self) -> None:
+            if getattr(self, "_config_dirty", False):
+                self.save_config()
 
         def _on_close(self) -> None:
             self._is_initializing = False
-            self.save_config()
+            if getattr(self, "_config_dirty", False):
+                self.save_config()
             self.root.destroy()
 
         def save_config(self) -> None:
             if getattr(self, "_is_initializing", False) or len(getattr(self, "notebooks", [])) < 4:
                 return
+            self._config_dirty = True
             pane_tabs: List[List[str]] = []
             pane_active_indices: List[int] = []
             for nb in self.notebooks:
@@ -4807,16 +7149,19 @@ def run_tkinter_app() -> None:
                 pane_tabs.append(tabs_list)
                 pane_active_indices.append(act_idx)
 
-            save_app_config({
-                "dark_mode": self.dark_mode,
-                "color_filter_enabled": self.color_filter_enabled,
-                "color_rules": self.color_rules,
-                "favorites": self.favorites,
-                "layout_mode": self.current_layout_mode,
-                "active_pane_index": self.active_pane_idx,
-                "pane_tabs": pane_tabs,
-                "pane_active_tab_indices": pane_active_indices,
-            })
+            save_app_config(
+                {
+                    "dark_mode": self.dark_mode,
+                    "color_filter_enabled": self.color_filter_enabled,
+                    "color_rules": self.color_rules,
+                    "favorites": self.favorites,
+                    "layout_mode": self.current_layout_mode,
+                    "active_pane_index": self.active_pane_idx,
+                    "pane_tabs": pane_tabs,
+                    "pane_active_tab_indices": pane_active_indices,
+                },
+                engine="tk",
+            )
 
         def step_font_zoom(self, step: int) -> None:
             self.font_size = max(9, min(18, self.font_size + step))
@@ -4826,7 +7171,7 @@ def run_tkinter_app() -> None:
             top_bar = ttk.Frame(self.root)
             top_bar.pack(fill=tk.X, padx=4, pady=3)
 
-            mb_layout = ttk.Menubutton(top_bar, text="📐 레이아웃 ▼")
+            mb_layout = ttk.Menubutton(top_bar, text="📐 레이아웃 ▾")
             m_layout = tk.Menu(mb_layout, tearoff=0)
             for key, label in [
                 ("quad", "4분할 (2×2)"),
@@ -4838,7 +7183,7 @@ def run_tkinter_app() -> None:
             mb_layout["menu"] = m_layout
             mb_layout.pack(side=tk.LEFT, padx=3)
 
-            mb_drive = ttk.Menubutton(top_bar, text="💽 드라이브 ▼")
+            mb_drive = ttk.Menubutton(top_bar, text="💽 드라이브 ▾")
             m_drive = tk.Menu(mb_drive, tearoff=0)
             for d in get_mounted_drives():
                 r = str(d["root"])
@@ -5015,17 +7360,124 @@ def run_tkinter_app() -> None:
                     messagebox.showwarning("파일 작업 오류", str(exc))
             self.refresh_all()
 
+        def _finish_self_test_tk(self) -> None:
+            self._is_initializing = False
+            if is_isolated_profile_active():
+                self.save_config()
+            self._on_close()
+
         def run(self) -> None:
+            if getattr(sys, "_qdir_self_test_gui", False):
+                self.root.after(150, self._finish_self_test_tk)
             self.root.mainloop()
 
     TkQDirApp().run()
 
 
-def main() -> None:
-    if _check_or_install_pyqt6():
+def parse_cli_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="q_dir.py",
+        description="PyQuadDir Desktop Explorer v3.1 (Quad-View File Manager for Windows)",
+        add_help=True,
+    )
+    parser.add_argument(
+        "--profile-dir",
+        "--profile",
+        dest="profile_dir",
+        default=None,
+        help="테스트 또는 독립 실행용 전용 프로필 폴더 경로 (지정 시 홈/실행 폴더 설정을 건드리지 않음)",
+    )
+    parser.add_argument(
+        "--config",
+        "--config-path",
+        dest="config_path",
+        default=None,
+        help="단일 설정 JSON 파일 경로 (지정 시 홈/실행 폴더 설정을 건드리지 않음)",
+    )
+    parser.add_argument(
+        "--engine",
+        choices=("auto", "qt", "tk"),
+        default="auto",
+        help="실행할 GUI 엔진 선택 (기본값: auto)",
+    )
+    parser.add_argument(
+        "--self-test-gui",
+        action="store_true",
+        help="실제 Qt/Tk GUI 창 초기화를 검증한 뒤 즉시 종료 (GUI 예외 시 실패 반환)",
+    )
+    parser.add_argument(
+        "--self-test-profile",
+        action="store_true",
+        help="GUI 없이 격리 프로필·4분할 세션·엔진 호환 설정 병합만 단위 검증",
+    )
+    args, remaining = parser.parse_known_args(argv)
+    if args.profile_dir or args.config_path:
+        set_active_profile(profile_dir=args.profile_dir, config_path=args.config_path)
+    sys._qdir_self_test_gui = bool(args.self_test_gui)  # type: ignore[attr-defined]
+    sys.argv = [sys.argv[0]] + remaining
+    return args
+
+
+def run_headless_self_test(preferred_engine: str = "qt") -> None:
+    """디스플레이 서버나 GUI 바인딩이 없는 헤드리스 환경에서 4분할·탭·즐겨찾기·뷰모드·설정 저장을 자가 검증합니다."""
+    cfg = load_app_config()
+    starts = get_initial_4_paths()
+    saved_pane_tabs = cfg.get("pane_tabs", [])
+    pane_tabs: List[List[str]] = []
+    for i in range(4):
+        restored_list: List[str] = []
+        if isinstance(saved_pane_tabs, list) and i < len(saved_pane_tabs) and isinstance(saved_pane_tabs[i], list):
+            for p_str in saved_pane_tabs[i]:
+                r_dir = resolve_restorable_dir(str(p_str))
+                if r_dir:
+                    restored_list.append(r_dir)
+        if not restored_list:
+            restored_list = [starts[i]]
+        pane_tabs.append(restored_list)
+
+    favs = cfg.get("favorites")
+    if not isinstance(favs, list) or not favs:
+        favs = get_default_favorites()
+
+    default_vm = str(cfg.get("default_view_mode", "details"))
+    if default_vm not in ZOOM_WHEEL_ORDER:
+        default_vm = "details"
+
+    save_app_config(
+        {
+            "dark_mode": bool(cfg.get("dark_mode", True)),
+            "color_filter_enabled": bool(cfg.get("color_filter_enabled", True)),
+            "color_rules": cfg.get("color_rules", json.loads(json.dumps(DEFAULT_COLOR_RULES))),
+            "favorites": favs,
+            "layout_mode": str(cfg.get("layout_mode", "quad")),
+            "default_view_mode": default_vm,
+            "show_icons": bool(cfg.get("show_icons", True)),
+            "show_file_extensions": bool(cfg.get("show_file_extensions", True)),
+            "show_hidden_files": bool(cfg.get("show_hidden_files", False)),
+            "active_pane_index": int(cfg.get("active_pane_index", 0)),
+            "pane_tabs": pane_tabs,
+            "pane_active_tab_indices": [0, 0, 0, 0],
+            "pane_tab_view_modes": [[default_vm for _ in row] for row in pane_tabs],
+            "window_geometry": cfg.get("window_geometry", [80, 60, 1520, 940, False]),
+        },
+        engine=preferred_engine if preferred_engine in ("qt", "tk") else "qt",
+    )
+
+
+def main(argv: Optional[List[str]] = None) -> None:
+    args = parse_cli_args(argv)
+    if getattr(args, "self_test_profile", False):
+        run_headless_self_test(preferred_engine=args.engine)
+        return
+    if args.engine == "tk":
+        run_tkinter_app()
+    elif args.engine == "qt":
         run_pyqt6_app()
     else:
-        run_tkinter_app()
+        if _check_or_install_pyqt6():
+            run_pyqt6_app()
+        else:
+            run_tkinter_app()
 
 
 if __name__ == "__main__":

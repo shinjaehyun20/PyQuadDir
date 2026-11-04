@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/Engine-PySide6%20%7C%20PyQt6%20%7C%20Tkinter-41CD52?style=for-the-badge&logo=qt&logoColor=white" alt="GUI Engine" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Platform" />
-  <img src="https://img.shields.io/badge/Release-v2.5.0-2563EB?style=for-the-badge" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v3.1.0-2563EB?style=for-the-badge" alt="Release Version" />
   <img src="https://img.shields.io/badge/License-MIT-F59E0B?style=for-the-badge" alt="License" />
 </p>
 
