@@ -109,6 +109,9 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 # 공통 설정 및 확장자 색상 필터 프리셋
 # ---------------------------------------------------------------------------
 CONFIG_PATH = Path.home() / ".qdir_py_config.json"
+APP_NAME = "PyQuadDir Desktop Explorer"
+APP_VERSION = "3.1.1"
+RELEASES_URL = "https://github.com/shinjaehyun20/PyQuadDir/releases/latest"
 
 IMAGE_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".svg", ".tif", ".tiff"
@@ -2310,6 +2313,7 @@ def run_pyqt6_app() -> None:
     )
     from PyQt6.QtGui import (
         QColor,
+        QDesktopServices,
         QDrag,
         QFont,
         QFontMetrics,
@@ -5297,7 +5301,7 @@ def run_pyqt6_app() -> None:
             self._syncing_splitters: bool = False
             self.panes: List[ExplorerPane] = []
 
-            self.setWindowTitle("PyQuadDir Desktop Explorer v3.1 — 4분할 다중 탭 파일 탐색기")
+            self.setWindowTitle(APP_NAME)
             self.setMinimumSize(320, 420)
 
             self.config = load_app_config()
@@ -5601,6 +5605,12 @@ def run_pyqt6_app() -> None:
             self.btn_theme.clicked.connect(self._toggle_theme)
             cmd_tb.addWidget(self.btn_theme)
 
+            self.btn_version = QToolButton()
+            self.btn_version.setText("버전정보")
+            self.btn_version.setToolTip("현재 버전 및 공식 업데이트 확인")
+            self.btn_version.clicked.connect(self.show_version_info)
+            cmd_tb.addWidget(self.btn_version)
+
             self.addToolBarBreak(Qt.ToolBarArea.TopToolBarArea)
             self.fav_tb = QToolBar("즐겨찾기 전용 바")
             self.fav_tb.setObjectName("FavToolbar")
@@ -5686,6 +5696,25 @@ def run_pyqt6_app() -> None:
                 "준비 완료 — 종료 전 열어둔 모든 디렉터리와 탭 상태가 실시간으로 자동 저장 및 복원됩니다."
             )
             self._register_shortcuts()
+
+        def check_for_updates(self) -> None:
+            # User action only: open official release notes, never download/install.
+            if not QDesktopServices.openUrl(QUrl(RELEASES_URL)):
+                QMessageBox.warning(self, "업데이트 확인", "공식 릴리스 페이지를 열 수 없습니다.")
+
+        def show_version_info(self) -> None:
+            dialog = QDialog(self)
+            dialog.setWindowTitle("버전정보")
+            layout = QVBoxLayout(dialog)
+            layout.addWidget(QLabel(f"{APP_NAME}\n현재 버전: {APP_VERSION}\n라이선스: MIT License", dialog))
+            update_button = QPushButton("업데이트 확인", dialog)
+            update_button.setToolTip("공식 GitHub 릴리스 페이지 열기 (자동 다운로드·설치 없음)")
+            update_button.clicked.connect(self.check_for_updates)
+            layout.addWidget(update_button)
+            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, dialog)
+            buttons.rejected.connect(dialog.reject)
+            layout.addWidget(buttons)
+            dialog.exec()
 
         def _refresh_toolbar_icons(self) -> None:
             dm = self.dark_mode
@@ -7139,7 +7168,7 @@ def run_tkinter_app() -> None:
         def __init__(self) -> None:
             self._is_initializing = True
             self.root = tk.Tk()
-            self.root.title("PyQuadDir Desktop Explorer v3.1 (Tkinter Engine)")
+            self.root.title("PyQuadDir Desktop Explorer v3.1.1 (Tkinter Engine)")
             self.root.geometry("1440x880")
             self.root.minsize(320, 420)
 
@@ -7426,7 +7455,7 @@ def run_tkinter_app() -> None:
 def parse_cli_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="q_dir.py",
-        description="PyQuadDir Desktop Explorer v3.1 (Quad-View File Manager for Windows)",
+        description="PyQuadDir Desktop Explorer v3.1.1 (Quad-View File Manager for Windows)",
         add_help=True,
     )
     parser.add_argument(

@@ -32,7 +32,7 @@ from typing import List
 
 
 APP_NAME = "PyQuadDir"
-APP_VERSION = (3, 1, 0, 0)  # README/CHANGELOG release contract: v3.1.0
+APP_VERSION = (3, 1, 1, 0)  # README/CHANGELOG release contract: v3.1.1
 SOURCE_SCRIPT = "pyquaddir.py"
 ICON_FILE = "pyquaddir.ico"
 VERSION_FILE = "version_info.txt"
@@ -310,6 +310,10 @@ def main() -> int:
         action="store_true",
         help="빌드 완료 후 dist 폴더를 탐색기로 자동 열지 않습니다.",
     )
+    parser.add_argument(
+        "--system-msvc-runtime", action="store_true",
+        help="공개 PyQt6 빌드: 검증된 Microsoft DLL 7개를 제외합니다. 사용자 VC v14 x64 런타임 14.44.35211.0 이상 필요.",
+    )
     args = parser.parse_args()
 
     base_dir = Path(__file__).resolve().parent
@@ -360,6 +364,28 @@ def main() -> int:
         onefile=not args.onedir,
         clean=True,
     )
+
+    if args.system_msvc_runtime:
+        if qt_pkg != "PyQt6" or platform.system() != "Windows":
+            raise RuntimeError("The reviewed system-runtime policy requires Windows/PyQt6")
+        # Generate the original spec with the exact original options, then filter
+        # Analysis output before PYZ/EXE. No module exclusion or binary surgery.
+        spec_cmd = [sys.executable, "-m", "PyInstaller.utils.cliutils.makespec"]
+        spec_cmd += [x for x in cmd[3:] if x not in ("--noconfirm", "--clean")]
+        subprocess.run(spec_cmd, cwd=str(base_dir), check=True)
+        spec_path = base_dir / f"{APP_NAME}.spec"
+        spec = spec_path.read_text(encoding="utf-8")
+        marker = "pyz = PYZ("
+        if spec.count(marker) != 1:
+            raise RuntimeError("Generated spec structure drift requires review")
+        fragment = (
+            "import sys\nfrom pathlib import Path\n"
+            "sys.path.insert(0, str(Path(SPECPATH)))\n"
+            "from msvc_runtime_policy import without_bundled_msvc\n"
+            "a.binaries = without_bundled_msvc(a.binaries)\n\n"
+        )
+        spec_path.write_text(spec.replace(marker, fragment + marker, 1), encoding="utf-8")
+        cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", str(spec_path)]
 
     # 실행 중인 PyQuadDir.exe가 있어 삭제가 거부될 경우 .old로 이름 변경 우회 (Windows MoveFile 허용 활용)
     existing_exe = base_dir / "dist" / f"{APP_NAME}.exe"

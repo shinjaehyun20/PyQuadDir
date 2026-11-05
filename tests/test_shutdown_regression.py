@@ -109,7 +109,7 @@ class ShutdownRegression(unittest.TestCase):
     def test_version_resource_is_generated_from_contract(self):
         sys.path.insert(0, str(ROOT))
         import build_exe
-        self.assertEqual(build_exe.APP_VERSION, (3, 1, 0, 0))
+        self.assertEqual(build_exe.APP_VERSION, (3, 1, 1, 0))
         with tempfile.TemporaryDirectory() as tmp:
             generated = build_exe.generate_version_file(Path(tmp) / 'version.txt')
             self.assertEqual(generated.read_text(encoding='utf-8'), (ROOT / 'version_info.txt').read_text(encoding='utf-8'))

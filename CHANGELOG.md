@@ -4,6 +4,20 @@ All notable changes to the PyQuadDir project are documented in this file.
 
 ---
 
+## [v3.1.1] - 2026-11-05
+
+### Fixed
+- Save detached session snapshots on Qt shutdown without reading deleted widgets.
+- Restore saved window geometry; keep the supported minimum height at 420px.
+- Keep long filenames readable in the Inspector and preserve pane state when closing it.
+- Align Windows executable metadata and the application title with v3.1.1.
+
+### Documentation
+- Add direct Windows download, first-run steps and local-settings/privacy guidance.
+- Make the Inspector regression fixture independent of a developer-specific path.
+
+---
+
 ## [v3.1.0] - 2026-11-05
 
 ### Added

@@ -6,13 +6,13 @@
 # 🗂️ PyQuadDir
 
 ### *"Alt+Tab 창 전환 없이 4개 폴더를 한 화면에서 지휘하다"*
-**파일 핸들링 동선을 75% 단축하는 Python 기반 2×2 쿼드 디렉터리 다중 탭 워크스테이션**
+**4개 폴더와 여러 탭을 한 화면에서 다루는 데스크톱 파일 탐색기**
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python Version" />
   <img src="https://img.shields.io/badge/Engine-PySide6%20%7C%20PyQt6%20%7C%20Tkinter-41CD52?style=for-the-badge&logo=qt&logoColor=white" alt="GUI Engine" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Platform" />
-  <img src="https://img.shields.io/badge/Release-v3.1.0-2563EB?style=for-the-badge" alt="Release Version" />
+  <img src="https://img.shields.io/badge/Release-v3.1.1-2563EB?style=for-the-badge" alt="Release Version" />
   <img src="https://img.shields.io/badge/License-MIT-F59E0B?style=for-the-badge" alt="License" />
 </p>
 
@@ -29,13 +29,26 @@
 
 ---
 
-## Local repair / build provenance (2026-11-05)
+## Windows에서 바로 시작
 
-- Release remains **v3.1.0**, matching this README and CHANGELOG; no v3.1.1 release/tag is claimed. `build_exe.APP_VERSION` is the build-resource source of truth; `version_info.txt` is generated from it.
-- The existing `dist/PyQuadDir.exe` is still **2.5.0.0**. Source repair does not update that binary. A clean staging build reports **3.1.0.0**; production replacement requires independent verification.
-- Qt 창의 최소 높이는 420px입니다. 저장된 창 위치와 크기를 복원하며, 연결된 화면 밖으로 벗어난 위치만 보정합니다.
-- Qt exit persistence uses a detached JSON snapshot; normal close saves once and unregisters its exit callback. Both `pyquaddir.py` and the compatible `q_dir.py` entry retain the same shutdown contract.
-- Regression commands: `python -m unittest discover -s . -p test_q_dir_v31.py -v`, `python -m unittest discover -s tests -p test_q_dir_v31.py -v`, and `python -m unittest discover -s tests -p test_shutdown_regression.py -v`. Use an isolated temporary profile and `QT_QPA_PLATFORM=offscreen` for GUI tests.
+### [⬇ Windows 64-bit용 PyQuadDir.exe 다운로드](https://github.com/shinjaehyun20/PyQuadDir/releases/latest/download/PyQuadDir.exe)
+
+**Windows x64용입니다. Python 설치는 필요 없지만 Microsoft Visual C++ v14 x64 Runtime 14.44.35211.0 이상이 필요합니다.** [최신 릴리스와 변경 사항](https://github.com/shinjaehyun20/PyQuadDir/releases/latest) · [전체 변경 기록](CHANGELOG.md)
+
+1. 필요한 경우 [Microsoft 공식 Visual C++ v14 x64 런타임](https://aka.ms/vc14/vc_redist.x64.exe)을 직접 설치한 뒤 위 링크에서 `PyQuadDir.exe`를 내려받습니다. GitHub의 **Source code (zip)**은 실행 파일이 아닌 개발용 소스입니다.
+2. 쓰기 가능한 원하는 폴더에 저장하고 실행합니다. 앱 설치 프로그램은 없습니다. Microsoft 런타임 DLL/설치 프로그램은 포함하지 않으며 자동 설치하지 않습니다. 전체 고지·대응 소스는 릴리스의 배포 ZIP과 함께 받으세요.
+3. 네 패널에서 각각 폴더를 열고 `Ctrl+T`로 탭을 추가합니다. `Ctrl+1`은 4분할, `Ctrl+마우스 휠`은 보기 확대·축소입니다.
+
+- **주요 기능:** 4분할·다중 탭, 패널 간 복사·이동, 이미지/문서 미리 보기, 다크·라이트 테마, 세션 복원.
+- **로컬 설정:** 홈 폴더의 `.pyquaddir_config.json`과 실행 폴더의 `.pyquaddir_session.json`에 방문 경로·탭·창 상태가 저장될 수 있습니다. 실행 파일을 다른 사람에게 전달할 때 개인 설정 파일을 함께 보내지 마세요.
+- **Windows 보안 알림:** 서명되지 않은 실행 파일은 SmartScreen 경고가 표시될 수 있습니다. 경고만으로 안전성이나 위험성이 확정되지는 않습니다. 출처와 릴리스의 해시를 확인하고, 신뢰 여부를 판단할 수 없다면 실행하지 마세요. 보안 기능을 끌 필요는 없습니다.
+- **해시 확인(선택):** PowerShell에서 `Get-FileHash .\PyQuadDir.exe -Algorithm SHA256`을 실행하여 릴리스에 제공된 SHA-256과 비교합니다.
+
+**English:** A four-pane, multi-tab desktop file explorer. [Download the latest Windows executable](https://github.com/shinjaehyun20/PyQuadDir/releases/latest/download/PyQuadDir.exe); no Python installation required. Windows x64 requires Microsoft Visual C++ v14 x64 Runtime 14.44.35211.0 or newer, installed directly from Microsoft. Source users can follow Quick Start below.
+
+### v3.1.1 수정 사항
+
+Qt 종료 시 세션 저장 오류, Inspector의 긴 파일명 표시, 저장된 창 위치·크기 복원을 개선했습니다. Qt 창의 최소 높이는 420px입니다. 자세한 내용은 [CHANGELOG](CHANGELOG.md)를 참고하세요.
 
 ## 📸 0. Live Demo
 
@@ -157,8 +170,8 @@ flowchart TB
 
 ## 🚀 4. Quick Start
 
-### 방법 A. 무설치 포터블 실행 파일 (`.exe`) — *Windows 권장*
-Python이 설치되어 있지 않은 환경이라면 [**Releases 페이지**](../../releases)에서 최신 `PyQuadDir.exe`를 다운로드하여 즉시 실행할 수 있습니다.
+### 방법 A. 단일 실행 파일 (`.exe`) — *Windows x64 권장*
+Python이 설치되어 있지 않은 환경이라면 [**Releases 페이지**](../../releases)에서 최신 `PyQuadDir.exe`를 다운로드하고, 위의 Microsoft 런타임 요구 사항을 확인한 후 실행합니다.
 
 ### 방법 B. Python 소스코드로 직접 실행
 ```bash
@@ -184,8 +197,8 @@ python pyquaddir.py --pyqt6
 # 외부 패키지 없이 Python 표준 내장 Tkinter 엔진으로 즉시 실행
 python pyquaddir.py --tk
 
-# PyInstaller 기반 무설치 단일 실행 파일(dist/PyQuadDir.exe) 직접 빌드
-python build_exe.py
+# 공개 배포와 같은 MSVC 비포함 빌드 (검증된 Windows/PyQt6 버전 필요)
+python build_exe.py --system-msvc-runtime --no-open
 ```
 </details>
 
@@ -228,7 +241,7 @@ python build_exe.py
   - [x] 실행 전 파일 매직 헤더(`%PDF-`, `PK`, `OLE2`, 기업 DRM) & 클라우드 스트리밍(0바이트) 정밀 진단기 (`diagnose_file_health`)
   - [x] 외부 프로그램 없이 동작하는 **내장 Excel(`.xlsx`) 시트 표 뷰어 & HTML 렌더링 만능 뷰어** 탑재
   - [x] 주소창 `file:///` 프로토콜 및 URL 퍼센트 인코딩(`%20`, 한글) 자동 해독 & 파일 경로 직접 포커싱
-- [x] **v2.5 (Current)**:
+- [x] **v2.5**:
   - [x] 종료 전 열어둔 4개 패널 디렉터리·활성 탭·보기 모드·창 크기 실시간 이중 저장 및 재실행 시 100% 복원 (`resolve_restorable_dir`)
   - [x] 긴 경로/파일명 진입 시 창·패널 크기 튐(Jumping) 원천 차단 (`ElidedLabel` & `QSizePolicy.Ignored`)
   - [x] 4분할(`quad`) 선택 시 위·아래 패널 너비 50:50 정밀 통일 및 상·하단 중앙 구분선 실시간 동기화
@@ -238,7 +251,7 @@ python build_exe.py
 
 ## 📄 7. License & Contact
 
-이 프로젝트는 **MIT License** 하에 배포됩니다. 자세한 내용은 [`LICENSE`](LICENSE) 파일을 참고하세요.
+이 저장소의 자체 소스코드는 **MIT License**입니다. 자세한 내용은 [`LICENSE`](LICENSE)를 참고하세요. 실행 파일에 포함된 Qt/Python 등 제3자 구성 요소에는 각각의 별도 라이선스가 적용되며, 바이너리 배포 시 해당 고지와 소스 제공 의무를 별도로 확인해야 합니다.
 
 * **GitHub**: [@shinjaehyun20](https://github.com/shinjaehyun20)
 * **Issue & Feature Request**: [GitHub Issues](../../issues)

@@ -8,10 +8,11 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-FIX = Path('D:/workspace/tmp/pyquaddir-inspector-20261105_141655_86e40b')
+FIX = Path(tempfile.mkdtemp(prefix='pyquaddir-inspector-'))
 
 
 def probe(module, folder):
