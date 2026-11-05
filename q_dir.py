@@ -2320,6 +2320,7 @@ def run_pyqt6_app() -> None:
         QPen,
         QPixmap,
         QShortcut,
+        QTextOption,
     )
     from PyQt6.QtWidgets import (
         QAbstractItemView,
@@ -2347,6 +2348,7 @@ def run_pyqt6_app() -> None:
         QRubberBand,
         QSizePolicy,
         QSplitter,
+
         QStackedWidget,
         QStatusBar,
         QTableWidget,
@@ -4662,7 +4664,7 @@ def run_pyqt6_app() -> None:
 
             self.btn_close = QToolButton()
             self.btn_close.setObjectName("InspectorCloseBtn")
-            self.btn_close.setText("✕")
+            self.btn_close.setText("X")
             self.btn_close.setToolTip("창 닫기")
             self.btn_close.clicked.connect(self.main_window.close_inspector_pane)
             hdr.addWidget(self.btn_close)
@@ -4674,6 +4676,18 @@ def run_pyqt6_app() -> None:
             self.img_label.setMinimumHeight(180)
             self.img_label.setWordWrap(True)
             layout.addWidget(self.img_label)
+
+            self.name_heading = QPlainTextEdit()
+            self.name_heading.setReadOnly(True)
+            self.name_heading.setWordWrapMode(QTextOption.WrapMode.WrapAnywhere)
+            self.name_heading.setMaximumHeight(100)
+            self.name_heading.setMinimumWidth(0)
+            self.name_heading.setStyleSheet("font-weight: 700; font-size: 13px;")
+            layout.insertWidget(1, self.name_heading)
+            self.btn_copy_path = QToolButton()
+            self.btn_copy_path.setText("경로 복사")
+            self.btn_copy_path.clicked.connect(lambda: QApplication.clipboard().setText(self.current_target_path))
+            layout.insertWidget(2, self.btn_copy_path)
 
             self.html_browser = QTextBrowser()
             self.html_browser.setObjectName("InspectorHtmlBrowser")
@@ -4694,11 +4708,14 @@ def run_pyqt6_app() -> None:
             self.text_preview.hide()
             layout.addWidget(self.text_preview, stretch=1)
 
-            self.meta_label = QLabel("파일이나 폴더를 선택하면 여기에 정보가 표시됩니다.")
+            self.meta_label = QTextBrowser()
+            self.meta_label.setPlainText("파일이나 폴더를 선택하면 여기에 정보가 표시됩니다.")
             self.meta_label.setObjectName("InspectorMetaLabel")
-            self.meta_label.setWordWrap(True)
+            self.meta_label.setWordWrapMode(QTextOption.WrapMode.WrapAnywhere)
             self.meta_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             self.meta_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+            self.meta_label.setMinimumWidth(0)
+            self.meta_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
             layout.addWidget(self.meta_label, stretch=1)
             self.apply_theme(getattr(self.main_window, "dark_mode", True))
 
@@ -4708,7 +4725,7 @@ def run_pyqt6_app() -> None:
                     "QFrame#InspectorPane { background-color: #1E293B; color: #F8FAFC; border: 1px solid #334155; border-radius: 8px; } "
                     "QLabel#InspectorTitleLabel { color: #38BDF8; font-weight: 700; font-size: 13px; background: transparent; } "
                     "QLabel#InspectorPreviewLabel { color: #E2E8F0; background-color: #0F172A; border: 1px solid #334155; border-radius: 6px; padding: 6px; } "
-                    "QLabel#InspectorMetaLabel { color: #F8FAFC; background-color: #0F172A; border: 1px solid #334155; border-radius: 6px; padding: 8px; font-size: 12px; } "
+                    "QTextBrowser#InspectorMetaLabel { color: #F8FAFC; background-color: #0F172A; border: 1px solid #334155; border-radius: 6px; padding: 8px; font-size: 12px; } "
                     "QToolButton#InspectorCloseBtn { color: #F8FAFC; background-color: #334155; border: 1px solid #475569; border-radius: 5px; padding: 2px 7px; font-weight: bold; } "
                     "QToolButton#InspectorCloseBtn:hover { background-color: #EF4444; color: #FFFFFF; border-color: #F87171; }"
                 )
@@ -4717,7 +4734,7 @@ def run_pyqt6_app() -> None:
                     "QFrame#InspectorPane { background-color: #FFFFFF; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 8px; } "
                     "QLabel#InspectorTitleLabel { color: #1E3A8A; font-weight: 700; font-size: 13px; background: transparent; } "
                     "QLabel#InspectorPreviewLabel { color: #1E293B; background-color: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 6px; padding: 6px; } "
-                    "QLabel#InspectorMetaLabel { color: #0F172A; background-color: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; font-size: 12px; } "
+                    "QTextBrowser#InspectorMetaLabel { color: #0F172A; background-color: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; font-size: 12px; } "
                     "QToolButton#InspectorCloseBtn { color: #0F172A; background-color: #E2E8F0; border: 1px solid #CBD5E1; border-radius: 5px; padding: 2px 7px; font-weight: bold; } "
                     "QToolButton#InspectorCloseBtn:hover { background-color: #EF4444; color: #FFFFFF; border-color: #DC2626; }"
                 )
@@ -4729,6 +4746,9 @@ def run_pyqt6_app() -> None:
 
         def inspect_path(self, path_str: str) -> None:
             self.current_target_path = path_str
+            self.name_heading.setPlainText(Path(path_str).name if path_str else "")
+            self.name_heading.setToolTip(path_str)
+            self.btn_copy_path.setEnabled(bool(path_str))
             self.html_browser.hide()
             self.excel_table.hide()
             self.text_preview.hide()
@@ -4737,7 +4757,7 @@ def run_pyqt6_app() -> None:
                 self.img_label.show()
                 self.img_label.setPixmap(QPixmap())
                 self.img_label.setText("항목을 선택해 미리 보거나\n세부 정보를 확인하세요.")
-                self.meta_label.setText("")
+                self.meta_label.setPlainText("")
                 return
 
             norm_p = safe_norm_path(path_str)
@@ -4831,6 +4851,7 @@ def run_pyqt6_app() -> None:
                 self.img_label.setPixmap(ic.pixmap(QSize(72, 72)))
 
             if self.mode == "details":
+                self.img_label.hide()
                 lines = [
                     f"📌 이름: {p.name}",
                     f"📂 유형: {'폴더' if is_dir else (ext.upper()[1:] + ' 파일' if ext else '파일')}",
@@ -4847,7 +4868,7 @@ def run_pyqt6_app() -> None:
                     f"📅 만든 날짜: {ctime_str}",
                     f"👁️ 액세스한 날짜: {atime_str}",
                 ])
-                self.meta_label.setText("\n".join(lines))
+                self.meta_label.setPlainText("\n".join(lines))
                 self.meta_label.show()
             else:
                 short_info = f"📄 {p.name}"
@@ -4855,7 +4876,7 @@ def run_pyqt6_app() -> None:
                     short_info += f"  ({img_dims}, {format_size(size_b)})"
                 elif not is_dir:
                     short_info += f"  ({format_size(size_b)})"
-                self.meta_label.setText(short_info)
+                self.meta_label.setPlainText(short_info)
                 self.meta_label.show()
 
     # -----------------------------------------------------------------------
@@ -5281,15 +5302,23 @@ def run_pyqt6_app() -> None:
 
             self.config = load_app_config()
             geom = self.config.get("window_geometry")
-            if isinstance(geom, list) and len(geom) >= 4:
-                try:
-                    w = max(320, int(geom[2]))
-                    h = max(420, int(geom[3]))
-                    self.resize(w, h)
-                except Exception:
-                    self.resize(1520, 940)
-            else:
-                self.resize(1520, 940)
+            try:
+                if not isinstance(geom, list) or len(geom) < 4:
+                    raise ValueError("Invalid window geometry")
+                x, y, w, h = (int(value) for value in geom[:4])
+                w, h = max(320, w), max(420, h)
+                # Retain valid coordinates on all monitors, including negative X.
+                screens = [screen.availableGeometry() for screen in QApplication.screens()]
+                title_area = QRect(x, y, min(w, 160), 32)
+                if screens and not any(rect.intersects(title_area) for rect in screens):
+                    rect = min(screens, key=lambda r: (r.center().x() - x) ** 2 + (r.center().y() - y) ** 2)
+                    x = max(rect.left(), min(x, rect.right() - min(w, rect.width()) + 1))
+                    y = max(rect.top(), min(y, rect.bottom() - min(h, rect.height()) + 1))
+                geom = [x, y, w, h, bool(geom[4]) if len(geom) > 4 else False]
+            except (TypeError, ValueError, OverflowError):
+                geom = [80, 60, 1520, 940, False]
+            self.config["window_geometry"] = geom
+            self.setGeometry(*geom[:4])
 
             self.dark_mode: bool = bool(self.config.get("dark_mode", True))
             self.color_filter_enabled: bool = bool(self.config.get("color_filter_enabled", True))
@@ -5332,14 +5361,18 @@ def run_pyqt6_app() -> None:
             self._apply_responsive_viewport(self.width(), force=True)
 
             self._config_dirty = False
+            self._session_closed = False
+            self._exit_snapshot = None
             atexit.register(self._save_config_on_exit)
 
         def _finish_initial_startup(self) -> None:
             self._is_initializing = False
 
         def _save_config_on_exit(self) -> None:
-            if getattr(self, "_config_dirty", False):
-                self.save_config()
+            # Qt widgets may already be destroyed; persist only plain data.
+            if self._config_dirty and self._exit_snapshot is not None:
+                save_app_config(self._exit_snapshot)
+                self._config_dirty = False
 
         def showEvent(self, event) -> None:
             super().showEvent(event)
@@ -5360,7 +5393,7 @@ def run_pyqt6_app() -> None:
             sb.showMessage(elided, timeout)
 
         def save_config(self) -> None:
-            if getattr(self, "_is_initializing", False) or len(self.panes) < 4:
+            if getattr(self, "_session_closed", False) or getattr(self, "_is_initializing", False) or len(self.panes) < 4:
                 return
             self._config_dirty = True
             pane_tabs = [pane.get_all_tab_paths() for pane in self.panes]
@@ -5388,7 +5421,7 @@ def run_pyqt6_app() -> None:
                     self.isMaximized(),
                 ]
             )
-            save_app_config({
+            self._exit_snapshot = json.loads(json.dumps({
                 "dark_mode": self.dark_mode,
                 "color_filter_enabled": self.color_filter_enabled,
                 "color_rules": self.color_rules,
@@ -5404,12 +5437,16 @@ def run_pyqt6_app() -> None:
                 "pane_active_tab_indices": pane_active_tab_indices,
                 "pane_tab_view_modes": pane_tab_view_modes,
                 "window_geometry": saved_geom,
-            })
+            }))
+            save_app_config(self._exit_snapshot)
 
         def closeEvent(self, event) -> None:
-            self._is_initializing = False
-            if getattr(self, "_config_dirty", False):
+            if not self._session_closed:
+                self._is_initializing = False
                 self.save_config()
+                self._session_closed = True
+                self._config_dirty = False
+                atexit.unregister(self._save_config_on_exit)
             super().closeEvent(event)
 
         def _build_ui(self) -> None:
@@ -5966,10 +6003,20 @@ def run_pyqt6_app() -> None:
                 self._rebuild_favorites_bar()
                 self.save_config()
 
+        def _fit_inspector_surface(self) -> None:
+            # Preserve the explorer widgets, including selection and scroll.
+            narrow = self.width() < 760
+            shown = not self.inspector_pane.isHidden()
+            self.main_splitter.setVisible(not (shown and narrow))
+            margins = self.centralWidget().layout().contentsMargins()
+            available = self.centralWidget().contentsRect().width() - margins.left() - margins.right()
+            self.inspector_pane.setFixedWidth(max(1, available) if narrow else 320)
+
         def toggle_inspector_pane(self, mode: str, show: bool) -> None:
             if show:
                 self.inspector_pane.set_mode(mode)
                 self.inspector_pane.show()
+                self._fit_inspector_surface()
                 self.btn_preview_toggle.setChecked(mode == "preview")
                 self.btn_details_toggle.setChecked(mode == "details")
                 t = self.active_pane().current_tab()
@@ -5980,6 +6027,7 @@ def run_pyqt6_app() -> None:
 
         def close_inspector_pane(self) -> None:
             self.inspector_pane.hide()
+            self._fit_inspector_surface()
             self.btn_preview_toggle.setChecked(False)
             self.btn_details_toggle.setChecked(False)
 
@@ -6107,6 +6155,7 @@ def run_pyqt6_app() -> None:
             super().resizeEvent(event)
             if not getattr(self, "_is_initializing", False):
                 self._apply_responsive_viewport(self.width())
+                self._fit_inspector_surface()
 
         def _classify_viewport_tier(self, width_px: int) -> str:
             if width_px <= 520:

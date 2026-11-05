@@ -32,6 +32,7 @@ from typing import List
 
 
 APP_NAME = "PyQuadDir"
+APP_VERSION = (3, 1, 0, 0)  # README/CHANGELOG release contract: v3.1.0
 SOURCE_SCRIPT = "pyquaddir.py"
 ICON_FILE = "pyquaddir.ico"
 VERSION_FILE = "version_info.txt"
@@ -146,11 +147,12 @@ def generate_quaddir_ico(output_path: Path, size: int = 64) -> Path:
 # 2. Windows 실행 파일 버전 리소스(version_info.txt) 생성기
 # ---------------------------------------------------------------------------
 def generate_version_file(output_path: Path) -> Path:
-    content = """# UTF-8
+    version_string = ".".join(map(str, APP_VERSION))
+    content = f"""# UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(2, 5, 0, 0),
-    prodvers=(2, 5, 0, 0),
+    filevers={APP_VERSION},
+    prodvers={APP_VERSION},
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -164,13 +166,13 @@ VSVersionInfo(
       StringTable(
         '041204B0',
         [StringStruct('CompanyName', 'PyQuadDir Open Source Project'),
-        StringStruct('FileDescription', 'PyQuadDir v2.5 4분할 다중 탭 파일 탐색기'),
-        StringStruct('FileVersion', '2.5.0.0'),
+        StringStruct('FileDescription', 'PyQuadDir v{version_string} 4분할 다중 탭 파일 탐색기'),
+        StringStruct('FileVersion', '{version_string}'),
         StringStruct('InternalName', 'PyQuadDir'),
         StringStruct('LegalCopyright', 'MIT License — Open Source Desktop Utility'),
         StringStruct('OriginalFilename', 'PyQuadDir.exe'),
         StringStruct('ProductName', 'PyQuadDir Desktop Explorer'),
-        StringStruct('ProductVersion', '2.5.0.0')])
+        StringStruct('ProductVersion', '{version_string}')])
       ]),
     VarFileInfo([VarStruct('Translation', [1042, 1200])])
   ]

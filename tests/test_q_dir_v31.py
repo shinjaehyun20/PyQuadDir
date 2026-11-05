@@ -35,7 +35,9 @@ from unittest import mock
 import zipfile
 
 # 테스트 대상 모듈 로드
-SCRIPT_DIR = Path(__file__).resolve().parent
+TEST_DIR = Path(__file__).resolve().parent
+# Source files live at repository root, not beside this discovered test copy.
+SCRIPT_DIR = TEST_DIR.parent if TEST_DIR.name == "tests" else TEST_DIR
 sys.path.insert(0, str(SCRIPT_DIR))
 import q_dir  # noqa: E402
 import importlib.util as _importlib_util

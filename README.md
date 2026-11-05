@@ -29,6 +29,14 @@
 
 ---
 
+## Local repair / build provenance (2026-11-05)
+
+- Release remains **v3.1.0**, matching this README and CHANGELOG; no v3.1.1 release/tag is claimed. `build_exe.APP_VERSION` is the build-resource source of truth; `version_info.txt` is generated from it.
+- The existing `dist/PyQuadDir.exe` is still **2.5.0.0**. Source repair does not update that binary. A clean staging build reports **3.1.0.0**; production replacement requires independent verification.
+- Qt 창의 최소 높이는 420px입니다. 저장된 창 위치와 크기를 복원하며, 연결된 화면 밖으로 벗어난 위치만 보정합니다.
+- Qt exit persistence uses a detached JSON snapshot; normal close saves once and unregisters its exit callback. Both `pyquaddir.py` and the compatible `q_dir.py` entry retain the same shutdown contract.
+- Regression commands: `python -m unittest discover -s . -p test_q_dir_v31.py -v`, `python -m unittest discover -s tests -p test_q_dir_v31.py -v`, and `python -m unittest discover -s tests -p test_shutdown_regression.py -v`. Use an isolated temporary profile and `QT_QPA_PLATFORM=offscreen` for GUI tests.
+
 ## 📸 0. Live Demo
 
 > **4개의 독립 디렉터리 뷰포트(Viewport) + 다중 탭 + `Ctrl + 마우스 휠` 8단계 실시간 줌 + 우측 실시간 미리 보기**를 단일 워크스페이스에서 제어합니다.
