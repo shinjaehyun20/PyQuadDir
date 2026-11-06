@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import stat
 import tempfile
 
@@ -79,6 +80,12 @@ WORKSPACE = ROOT.parent.parent
 # Native hook and terminal can use different interpreters. Pin the approved
 # Hermes runtime executable, not whichever interpreter imported this module.
 APPROVED_EXECUTABLE = Path.home() / 'AppData/Local/hermes/hermes-agent/venv/Scripts/python.exe'
+ADAPTER = Path.home() / 'AppData/Local/hermes/hooks/hermes-goal-adapter.py'
+
+def canonical_caller(executable):
+    """Resolve every command (including aliases) against the canonical CLI pin."""
+    resolved = shutil.which(executable)
+    return bool(resolved) and Path(resolved).resolve() == APPROVED_EXECUTABLE.resolve()
 
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -129,17 +136,22 @@ def validate(binding, task, session):
             seen.add(p.resolve())
             if digest(p) != row['sha256']:
                 return False
-        return {RUNNER, TEST, ROOT / 'goal_registry.py', ROOT / 'warp_cache_dispatch_guard.py'} <= seen
+        return {p.resolve() for p in (RUNNER, TEST, ROOT / 'goal_registry.py',
+                ROOT / 'warp_cache_dispatch_guard.py', ADAPTER)} <= seen
     except (ValueError, TypeError, OSError, KeyError):
         return False
 
 def admits_verification(runtime, payload, task):
-    if runtime != 'hermes' or payload.get('tool_name') != 'terminal':
+    from goal_registry import get_tool_name, get_tool_input, payload_session_id
+    if runtime != 'hermes' or get_tool_name(payload) != 'terminal':
+        return False
+    # Never inherit an ambient session when the native event omitted its owner.
+    if not any(payload.get(key) for key in ('session_id', 'sessionId', 'conversationId')):
         return False
     binding = (task.get('cache_policy') or {}).get('verification_only')
-    if not validate(binding, task, payload.get('session_id')):
+    if not validate(binding, task, payload_session_id(runtime, payload)):
         return False
-    args = payload.get('tool_input') or {}
+    args = get_tool_input(payload)
     if set(args) - {'command', 'workdir', 'timeout'}:
         return False
     try:

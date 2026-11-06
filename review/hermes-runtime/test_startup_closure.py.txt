@@ -1,0 +1,182 @@
+"""Hermes agentops bounded source regression; no product or startup code execution.
+Real disposable git checkout; process-count and registry adapters are fixture-only.
+No canonical branch changes, dependency pin refresh, or production admission claim.
+"""
+import contextlib
+import datetime
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+from unittest.mock import patch
+
+HERE = Path(__file__).parent
+HELPER = HERE / 'pyquaddir-build-admission.py'
+spec = importlib.util.spec_from_file_location('closure_guard', HELPER)
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+REAL_CHECK_OUTPUT = subprocess.check_output
+REAL_READ_TEXT = Path.read_text
+
+class ClosureTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='closure-', dir=HERE)
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.install = self.root/'interpreter'
+        self.site = self.install/'Lib/site-packages'
+        self.site.mkdir(parents=True)
+        self.python = self.install/'python.exe'
+        self.python.write_bytes(b'fixture interpreter, never executed')
+        self.pth = self.site/'startup.pth'
+        self.pth.write_text('# unchanged startup fixture\n', encoding='utf-8')
+        self.dep = self.site/'dynamic_package/module.py'
+        self.dep.parent.mkdir()
+        self.dep.write_text('# fixture source\n', encoding='utf-8')
+        self.repo = self.root/'repo'
+        self.repo.mkdir()
+        self.src = self.repo/'build_exe.py'
+        self.src.write_text('# non executable build fixture\n', encoding='utf-8')
+        for args in (['init','--quiet'], ['add','build_exe.py'], ['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','-c','commit.gpgsign=false','commit','--quiet','-m','isolated reviewed fixture']):
+            subprocess.run(['git',*args],cwd=self.repo,check=True,capture_output=True)
+        self.base = REAL_CHECK_OUTPUT(['git','rev-parse','HEAD'],cwd=self.repo,text=True).strip()
+        # Output/backup files are deliberately outside the tracked source surface.
+        (self.repo/'.git/info/exclude').write_text('/dist/\n', encoding='utf-8')
+        (self.repo/'dist').mkdir()
+        self.backup = self.repo/'dist/PyQuadDir.old-F76491BA.exe'
+        self.backup.write_bytes(b'fixture backup only')
+        self.registry = {'tasks':{m.TASK:{'owner_session_id':m.SESSION,'runtime':'hermes','mode':'execute','status':'active'}},'active_by_session':{'hermes':{m.SESSION:m.TASK}}}
+        self.stack = contextlib.ExitStack()
+        self.addCleanup(self.stack.close)
+        self.stack.enter_context(patch.dict(os.environ, {'PYTHONPATH':'','PYTHONHOME':'','PYTHONUSERBASE':'','APPDATA':str(self.root/'appdata')}))
+        self.stack.enter_context(patch.multiple(m, PYTHON=self.python, ROOT=self.repo, BASE=self.base, INTERPRETER=m.digest(self.python), SOURCES={'build_exe.py':m.digest(self.src)}, OLD_EXE=m.digest(self.backup), COMMAND='fixture-python build_exe.py --system-msvc-runtime --no-open'))
+        self.stack.enter_context(patch.object(m, 'DEPENDENCIES', m.inventory()['sha256']))
+        def read_text(p, *args, **kw):
+            if p.as_posix() == 'review-fixture/goal-registry.json':
+                return json.dumps(self.registry)
+            return REAL_READ_TEXT(p,*args,**kw)
+        self.stack.enter_context(patch.object(Path,'read_text',read_text))
+        def output(args, **kw):
+            if args[0]=='powershell.exe':
+                return '0\n' # fixture process-count adapter, no app interaction
+            return REAL_CHECK_OUTPUT(args,**kw)
+        self.stack.enter_context(patch.object(m.subprocess,'check_output',side_effect=output))
+        class BeforeExpiry(datetime.datetime):
+            @classmethod
+            def now(cls,tz=None):
+                return cls(2026,11,6,12,0,tzinfo=datetime.timezone.utc)
+        self.stack.enter_context(patch.object(datetime,'datetime',BeforeExpiry))
+
+    def admit(self, **kw):
+        return m.admit(kw.pop('command',m.COMMAND),kw.pop('cwd',m.ROOT.as_posix()),kw.pop('session',m.SESSION),**kw)
+
+    def deny(self, pattern='fingerprint|unbound', **kw):
+        with self.assertRaisesRegex(ValueError,pattern): self.admit(**kw)
+
+    def test_unchanged_positive_real_isolated_revision(self):
+        self.assertEqual(self.admit(),'admit-canonical-build')
+        self.assertEqual(self.admit(),'admit-canonical-build')
+        self.assertEqual(REAL_CHECK_OUTPUT(['git','rev-parse','HEAD'],cwd=self.repo,text=True).strip(),self.base)
+
+    def test_pth_comment_change_is_bound_and_denied(self):
+        before=m.inventory()
+        self.pth.write_text('# modified only startup comment\n',encoding='utf-8')
+        self.assertNotEqual(before,m.inventory())
+        self.deny()
+
+    def test_executable_pth_dynamic_import_denied_without_execution(self):
+        sentinel=self.root/'MUST_NOT_EXIST'
+        # All payloads below are inert file contents; none is passed to Python.
+        for line in ('import pathlib; pathlib.Path('+repr(str(sentinel))+').write_text("executed")', 'import importlib; importlib.import_module("unlisted")', 'import\tos; os.environ["PYTHONPATH"]="outside"'):
+            with self.subTest(line=line):
+                self.pth.write_text(line+'\n',encoding='utf-8')
+                self.deny('executable .pth')
+        self.assertFalse(sentinel.exists())
+
+    def test_external_path_even_missing_denied(self):
+        for target in (str(self.root/'outside'),str(self.root/'missing')):
+            self.pth.write_text(target+'\n',encoding='utf-8')
+            self.deny('unbound .pth')
+
+    def test_internal_path_and_dynamic_package_sources_bound(self):
+        self.pth.write_text('dynamic_package\n',encoding='utf-8')
+        with patch.object(m,'DEPENDENCIES',m.inventory()['sha256']):
+            self.assertEqual(self.admit(),'admit-canonical-build')
+            self.dep.write_text('# changed dynamic source\n',encoding='utf-8')
+            self.deny()
+
+    def test_extra_missing_modified_dependencies(self):
+        baseline=self.dep.read_bytes()
+        for mode in ('extra','missing','modified'):
+            with self.subTest(mode=mode):
+                extra=self.site/'unprefixed_package.py'
+                if mode=='extra': extra.write_bytes(b'# added')
+                elif mode=='missing': self.dep.unlink()
+                else: self.dep.write_bytes(b'# modified')
+                self.deny()
+                if extra.exists(): extra.unlink()
+                self.dep.write_bytes(baseline)
+
+    def test_cached_fingerprint_cannot_skip_startup_validation(self):
+        self.pth.write_text('import arbitrary_startup\n',encoding='utf-8')
+        self.deny('executable .pth', dependencies=m.DEPENDENCIES)
+
+    def test_user_site_and_override_denied(self):
+        with patch.dict(os.environ,{'PYTHONUSERBASE':str(self.root/'other')}): self.deny('user-site')
+        user=Path(os.environ['APPDATA'])/'Python/Python311/site-packages'
+        user.mkdir(parents=True)
+        self.deny('user-site')
+
+    def test_bytecode_and_cache_import_roots_bound(self):
+        p=self.site/'__pycache__/standalone.pyc'; p.parent.mkdir(); p.write_bytes(b'bytecode fixture')
+        self.deny()
+
+    def test_source_interpreter_backup_and_existing_output(self):
+        for p in (self.src,self.python,self.backup):
+            with self.subTest(kind=p.name):
+                old=p.read_bytes(); p.write_bytes(old+b'changed'); self.deny('fingerprint|backup'); p.write_bytes(old)
+        (self.repo/'dist/PyQuadDir.exe').write_bytes(b'output exists')
+        self.deny('backup/output')
+
+    def test_exact_session_argv_cwd_and_environment(self):
+        for kw in ({'session':'wrong'},{'command':m.COMMAND+' --extra'},{'cwd':self.root.as_posix()}): self.deny('mismatch',**kw)
+        for key in ('PYTHONPATH','PYTHONHOME'):
+            with patch.dict(os.environ,{key:'outside'}): self.deny('environment')
+
+    def test_native_task_and_revision_negatives(self):
+        self.registry['tasks'][m.TASK]['owner_session_id']='wrong'
+        self.deny('native goal')
+        self.registry['tasks'][m.TASK]['owner_session_id']=m.SESSION
+        with patch.object(m,'BASE','0'*40): self.deny('revision')
+        (self.repo/'unexpected.txt').write_text('untracked',encoding='utf-8')
+        self.deny('dirty')
+
+    def test_expiry_denied(self):
+        class Expired(datetime.datetime):
+            @classmethod
+            def now(cls,tz=None): return cls(2026,11,6,15,0,tzinfo=datetime.timezone.utc)
+        with patch.object(datetime,'datetime',Expired): self.deny('expired')
+
+    def test_underscore_pth_and_customization_fail_closed(self):
+        for name, text, reason in (
+            ('python311._pth', str(self.root/'external')+'\n', 'unbound .pth'),
+            ('pyvenv.cfg', 'home = outside\n', 'virtual-environment'),
+            ('Lib/site-packages/sitecustomize.py', 'import dynamic\n', 'customization'),
+        ):
+            p=self.install/name
+            p.write_text(text,encoding='utf-8')
+            self.deny(reason)
+            p.unlink()
+
+    def test_real_hardlink_rejected_preserves_original(self):
+        original=self.dep.read_bytes()
+        alias=self.site/'hardlinked.py'
+        os.link(self.dep,alias)
+        self.deny('hardlink')
+        self.assertEqual(original,self.dep.read_bytes())
+
+if __name__=='__main__': unittest.main(verbosity=2)

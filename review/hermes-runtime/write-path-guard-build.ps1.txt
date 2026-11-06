@@ -1,0 +1,16 @@
+    # Canonical one-shot product build: no arbitrary script/argv or directory grant.
+    # Pinned read-only verifier checks native goal, clean revision, all build inputs,
+    # dependency tree, backup, closed app, aliases, expiry and interpreter environment.
+    $qdirBuild = 'review-fixture/interpreter/python.exe build_exe.py --system-msvc-runtime --no-open'
+    if ($toolName -ceq 'terminal' -and $command -ceq $qdirBuild -and $sessionId -ceq 'fixture-session' -and $toolInput.workdir -ceq 'review-fixture/repo' -and -not $toolInput.background -and -not $toolInput.pty) {
+        $qdirVerifier='review-fixture/pyquaddir-build-admission.py'
+        if ((Get-FileHash -LiteralPath $qdirVerifier -Algorithm SHA256).Hash.ToLowerInvariant() -ceq '3fb2c5816ff5d27123f1ad1e2660a80bb475ada1cf95bc260298d73d17101825') {
+            $qdirReceipt = & 'review-fixture/hook-host/python.exe' -B $qdirVerifier --command $command --cwd $toolInput.workdir --session $sessionId
+            if ($LASTEXITCODE -eq 0 -and $qdirReceipt -ceq 'admit-canonical-build') {
+                Add-EventLog -Record @{ ts_utc=(Get-Date).ToUniversalTime().ToString('o'); runtime='hermes'; decision='allow'; reason='pyquaddir_exact_canonical_build'; session_id=$sessionId; command=$command }
+                return
+            }
+        }
+        Write-BlockJson -Message 'Canonical PyQuadDir build admission denied: input/goal/output/environment contract mismatch.'
+        return
+    }

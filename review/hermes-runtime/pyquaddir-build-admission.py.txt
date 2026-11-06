@@ -1,0 +1,129 @@
+"""Read-only, task-scoped admission verifier; never executes product/build code."""
+from __future__ import annotations
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+
+ROOT = Path('review-fixture/repo')
+PYTHON = Path('review-fixture/interpreter/python.exe')
+SESSION = 'fixture-session'
+TASK = 'fixture-task'
+BASE = '85e9aabe2effdc71e03ca7ccfef372f8d3e07550'
+COMMAND = PYTHON.as_posix() + ' build_exe.py --system-msvc-runtime --no-open'
+SOURCES = {'build_exe.py':'b02cb6443f4718cc87487ce98904c0b98cb2661e8f8aaadab188c3927c713446', 'msvc_runtime_policy.py':'82c75d129c7637e96c392d54a59aedd9ed7f6df7154adeb0ffff505559822b04', 'pyquaddir.py':'7af75dac9851efb8938d3911dce229df8e7193b0e89f06876ac46abd99ce7e1c'}
+INTERPRETER = '5f7b89a612c9b8af1d6456cdfcd1dbe5ca630849e79aebced9bee9a6694952ec'
+DEPENDENCIES = 'bb627126984db4e91d59765843439053ea7639b394228fad658a2478e3bfacb6'
+OLD_EXE = 'f76491bafea57f4003f44dcd76fd1ac6d2cb6b9298c9c51302edf97c502d5eca'
+
+def digest(p):
+    return hashlib.sha256(p.read_bytes()).hexdigest()
+
+def no_alias(p):
+    for item in (p, *p.parents):
+        if item.exists() and (item.is_symlink() or bool(getattr(item.lstat(), 'st_file_attributes', 0) & 0x400)):
+            raise ValueError('filesystem alias')
+    if p.is_file() and p.stat().st_nlink != 1:
+        raise ValueError('hardlink')
+
+def inventory():
+    """Bind the install tree, including startup inputs; reject unknown code roots.
+
+    This is a conservative admission check, not an OS sandbox. Executable .pth
+    lines can compute arbitrary imports/paths, so do not execute them to discover
+    a purported closure. Reject them until a separately reviewed binding exists.
+    The historical dependency pin is deliberately NOT refreshed by this repair.
+    """
+    root = PYTHON.parent.resolve()
+    no_alias(PYTHON.parent)
+    if os.environ.get('PYTHONUSERBASE'):
+        raise ValueError('unbound user-site override')
+    # Canonical Windows Python uses APPDATA/Python/PythonXY/site-packages.
+    # Reject any existing user site conservatively, without importing its code.
+    appdata = os.environ.get('APPDATA')
+    if appdata and any((Path(appdata)/'Python').glob('Python*/site-packages')):
+        raise ValueError('unbound user-site startup root')
+    selected = []
+    for p in PYTHON.parent.rglob('*'):
+        no_alias(p)  # Check directories too; do not silently skip junctions.
+        if not p.is_file():
+            continue
+        # Include bytecode and cache files: a .pth path can make even a cache
+        # directory an ordinary import root. Do not assume it is non-executable.
+        if not p.resolve().is_relative_to(root):
+            raise ValueError('unbound dependency root')
+        selected.append(p)
+        if p.name.lower() == 'pyvenv.cfg':
+            raise ValueError('unbound virtual-environment startup root')
+        if p.name.lower() in ('sitecustomize.py', 'sitecustomize.pyc', 'usercustomize.py', 'usercustomize.pyc'):
+            raise ValueError('unbound startup customization code')
+        if p.suffix.lower() in ('.pth', '._pth'):
+            for line in p.read_text(encoding='utf-8-sig').splitlines():
+                if not line.strip() or line.startswith('#'):
+                    continue
+                if line.startswith(('import ', 'import\t')):
+                    raise ValueError('unbound executable .pth startup code')
+                target = p.parent / line.rstrip()
+                no_alias(target)
+                # Bind missing entries too: a later creation changes the complete
+                # install inventory; outside roots are unknown even if absent.
+                if not target.resolve().is_relative_to(root):
+                    raise ValueError('unbound .pth dependency root')
+    rows = {}
+    for p in sorted(set(selected)):
+        rows[p.relative_to(PYTHON.parent).as_posix()] = digest(p)
+    return {'file_count':len(rows), 'sha256':hashlib.sha256(json.dumps(rows,sort_keys=True,separators=(',',':')).encode()).hexdigest()}
+
+def admit(command, cwd, session, dependencies=None):
+    from datetime import datetime, timezone
+    if datetime.now(timezone.utc) >= datetime(2026,11,6,15,0,tzinfo=timezone.utc):
+        raise ValueError('task admission expired')
+    if any(os.environ.get(k) for k in ('PYTHONPATH','PYTHONHOME','PYTHONPLATLIBDIR')):
+        raise ValueError('interpreter environment override')
+    if command != COMMAND or cwd != ROOT.as_posix() or session != SESSION:
+        raise ValueError('command/cwd/session mismatch')
+    if dependencies is not None and dependencies != DEPENDENCIES:
+        raise ValueError('dependency fingerprint mismatch')
+    dependencies = inventory()['sha256']  # Never trust a caller's cached closure.
+    if DEPENDENCIES == 'UNBOUND' or dependencies != DEPENDENCIES:
+        raise ValueError('dependency fingerprint mismatch')
+    for p, expected in [(PYTHON,INTERPRETER), *((ROOT/n,h) for n,h in SOURCES.items())]:
+        no_alias(p)
+        if digest(p) != expected:
+            raise ValueError('input fingerprint mismatch')
+    registry = json.loads(Path('review-fixture/goal-registry.json').read_text(encoding='utf-8-sig'))
+    task = registry['tasks'][TASK]
+    if registry['active_by_session']['hermes'].get(SESSION) != TASK or task['owner_session_id'] != SESSION or task['runtime'] != 'hermes' or task['mode'] != 'execute' or task['status'] != 'active':
+        raise ValueError('native goal binding mismatch')
+    if subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip() != BASE:
+        raise ValueError('wrong source revision')
+    if subprocess.check_output(['git','status','--porcelain','--untracked-files=all'],cwd=ROOT,text=True).strip():
+        raise ValueError('dirty source')
+    backup = ROOT/'dist/PyQuadDir.old-F76491BA.exe'
+    no_alias(backup)
+    if digest(backup) != OLD_EXE or (ROOT/'dist/PyQuadDir.exe').exists():
+        raise ValueError('backup/output contract mismatch')
+    for n in ('build','dist','PyQuadDir.spec','pyquaddir.ico','version_info.txt'):
+        no_alias(ROOT/n)
+    ps = subprocess.check_output(['powershell.exe','-NoProfile','-Command',"@(Get-Process -Name PyQuadDir -ErrorAction SilentlyContinue).Count"],text=True).strip()
+    if ps != '0':
+        raise ValueError('application is running')
+    return 'admit-canonical-build'
+
+def main():
+    p=argparse.ArgumentParser()
+    p.add_argument('--inventory',action='store_true')
+    p.add_argument('--command')
+    p.add_argument('--cwd')
+    p.add_argument('--session')
+    a=p.parse_args()
+    if a.inventory:
+        print(json.dumps(inventory(),sort_keys=True)); return
+    try:
+        print(admit(a.command,a.cwd,a.session))
+    except Exception as exc:
+        print('deny: '+str(exc)); raise SystemExit(1)
+if __name__ == '__main__':
+    main()

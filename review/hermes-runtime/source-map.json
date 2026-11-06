@@ -1,63 +1,169 @@
 {
-  "purpose": "review-only exact source snapshots; not installed runtime or portable package",
+  "purpose": "Sanitized non-installable review snapshots; original bindings deliberately not re-authorized",
   "product_source_revision": "85e9aabe2effdc71e03ca7ccfef372f8d3e07550",
   "members": [
     {
       "review_file": "hermes-goal-adapter.py.txt",
       "source_basename": "hermes-goal-adapter.py",
       "source_sha256": "6a808ff5b6eb31ca4a330753742898b387182567788beab58817327d3c7ed8dc",
-      "lines": [
-        1,
-        190
+      "selected_ranges": [
+        [
+          1,
+          190
+        ]
       ],
       "review_sha256": "6a808ff5b6eb31ca4a330753742898b387182567788beab58817327d3c7ed8dc",
-      "redactions": []
+      "replacements": []
     },
     {
       "review_file": "hermes_verification_admission.py.txt",
       "source_basename": "hermes_verification_admission.py",
-      "source_sha256": "7c6ab54096c8dae6f5798452808c2780838fafe171043d5809bc70093aab4d0e",
-      "lines": [
-        1,
-        206
+      "source_sha256": "4320e1cd06d96cb361fae65380f3fcadd8aa0e78944c58c3fb0858ae35848bf4",
+      "selected_ranges": [
+        [
+          1,
+          218
+        ]
       ],
-      "review_sha256": "7c6ab54096c8dae6f5798452808c2780838fafe171043d5809bc70093aab4d0e",
-      "redactions": []
+      "review_sha256": "4320e1cd06d96cb361fae65380f3fcadd8aa0e78944c58c3fb0858ae35848bf4",
+      "replacements": []
     },
     {
       "review_file": "test_hermes_verification_admission.py.txt",
       "source_basename": "test_hermes_verification_admission.py",
-      "source_sha256": "cda3b3215ab76def6744532e4b5a070b114faa69519096922f2970b2d9775ad7",
-      "lines": [
-        1,
-        271
+      "source_sha256": "ed8eef8b9bf3af2354c0a5d03c55904286c313d025c27dca8e702ff4504650d4",
+      "selected_ranges": [
+        [
+          1,
+          424
+        ]
       ],
-      "review_sha256": "47244568a39eb5ada397b53f2b02ed291f03624a7a7c9f6de99dfa1eecfeaaf2",
-      "redactions": [
-        "Personal home path literal replaced with equivalent Path.home expression; no decision logic changed."
-      ]
+      "review_sha256": "ed8eef8b9bf3af2354c0a5d03c55904286c313d025c27dca8e702ff4504650d4",
+      "replacements": []
     },
     {
       "review_file": "goal_registry-admission.py.txt",
       "source_basename": "goal_registry.py",
-      "source_sha256": "4fd208dbb6581ae2f57b68fe7321fd99db5fd4ec7af033e0b5ecfe1a99af2d5e",
-      "lines": [
-        2892,
-        3047
+      "source_sha256": "93c61f0921d848769030431e0624d9d9df3671d94f624af409dfd5765b0930ea",
+      "selected_ranges": [
+        [
+          1785,
+          1787
+        ],
+        [
+          2597,
+          2610
+        ],
+        [
+          2892,
+          3047
+        ]
       ],
-      "review_sha256": "07fe00918bfd25fe6481e0d1dbfddf296372c70e07ad69158ef196855f5f3936",
-      "redactions": []
+      "review_sha256": "c746ba24ef200d63397b74846d0ab85c05363b9e4d9515b387b7920333072680",
+      "replacements": []
     },
     {
       "review_file": "warp_cache_dispatch_guard.py.txt",
       "source_basename": "warp_cache_dispatch_guard.py",
       "source_sha256": "ea5432b315c464101bcf1cfc3a1ce3b9357069df6dfd9cd50315069baf1ed212",
-      "lines": [
-        1,
-        181
+      "selected_ranges": [
+        [
+          1,
+          181
+        ]
       ],
       "review_sha256": "ea5432b315c464101bcf1cfc3a1ce3b9357069df6dfd9cd50315069baf1ed212",
-      "redactions": []
+      "replacements": []
+    },
+    {
+      "review_file": "pyquaddir-build-admission.py.txt",
+      "source_basename": "pyquaddir-build-admission.py",
+      "source_sha256": "cd5aeb0e4ead55ce173339d76ba83d22f82b10aa1689d98c75820613062bf3c6",
+      "selected_ranges": [
+        [
+          1,
+          129
+        ]
+      ],
+      "review_sha256": "851080604dddd37a5e9cf8cc8041a84d10aff9ca96f4881eec01ceff45a60e33",
+      "replacements": [
+        {
+          "original": "Path('D:/workspace/projects/active/pyquaddir')",
+          "replacement": "Path('review-fixture/repo')"
+        },
+        {
+          "replacement": "Path('review-fixture/interpreter/python.exe')",
+          "original_sha256": "7d926a17a141676c926a66b8eb82b607d2408ec340a2b0434f664f00125b9510"
+        },
+        {
+          "replacement": "'fixture-session'",
+          "original_sha256": "5ee08233a9e14d3e5d2e9b58940eced70a8d3fc729356c6695bd65653c07796e"
+        },
+        {
+          "replacement": "'fixture-task'",
+          "original_sha256": "07c8b02d440309579edff98ff7b293bb34f2f8e6ce3976c7e22ee8523e76a0c1"
+        },
+        {
+          "original": "Path('D:/workspace/runtime/registry/goal-registry.json')",
+          "replacement": "Path('review-fixture/goal-registry.json')"
+        }
+      ]
+    },
+    {
+      "review_file": "test_startup_closure.py.txt",
+      "source_basename": "test_startup_closure.py",
+      "source_sha256": "07f7f052dd66d2d31b965948857c42c58893ee4ae63635b50f74df5f830abd2d",
+      "selected_ranges": [
+        [
+          1,
+          182
+        ]
+      ],
+      "review_sha256": "1b638c4f65f943323e7375511fa090e1f7f664b2cd8f07ca57e4ac03ba94af81",
+      "replacements": [
+        {
+          "replacement": "HERE / 'pyquaddir-build-admission.py'",
+          "original_sha256": "4c57fa087f4171cc2dfa820aa8c90cf5c0f953ad082e25b942ea4038bd4236a0"
+        },
+        {
+          "original": "'D:/workspace/runtime/registry/goal-registry.json'",
+          "replacement": "'review-fixture/goal-registry.json'"
+        }
+      ]
+    },
+    {
+      "review_file": "write-path-guard-build.ps1.txt",
+      "source_basename": "write-path-guard.ps1",
+      "source_sha256": "41c50b18ff3f816473d46db13f1b729c0b821d8dd9336578a754e3b3fa2d19ad",
+      "selected_ranges": [
+        [
+          741,
+          756
+        ]
+      ],
+      "review_sha256": "4d55243e7ab5b27b53ddb2c731de5c73138aed823f5b547439f765c3dbd89381",
+      "replacements": [
+        {
+          "replacement": "review-fixture/interpreter/python.exe",
+          "original_sha256": "1d2e8eb9f23588f6d9e2d4714ec6b06167047df81bb3f7ed90b82b28fe1c920a"
+        },
+        {
+          "replacement": "review-fixture/hook-host/python.exe",
+          "original_sha256": "3c3f462c746a312d33fab0007a1a2064e344935a4db7bb94015f936c9b00a9b2"
+        },
+        {
+          "replacement": "review-fixture/pyquaddir-build-admission.py",
+          "original_sha256": "652b9e8780366db5ed19f4c9be23e6a7618fe77e19f6b47657f2694cd4797b0e"
+        },
+        {
+          "replacement": "fixture-session",
+          "original_sha256": "a133de45a1554af5f5c994b7101fa81a8a33a0c02560065cf621ea8ac9d78256"
+        },
+        {
+          "original": "D:/workspace/projects/active/pyquaddir",
+          "replacement": "review-fixture/repo"
+        }
+      ]
     }
   ]
 }

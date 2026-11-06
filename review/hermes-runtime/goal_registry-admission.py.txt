@@ -1,3 +1,22 @@
+def payload_session_id(runtime: str, payload: dict | None) -> str:
+    payload = payload or {}
+    return current_session_id(runtime, str(payload.get("session_id") or payload.get("conversationId") or payload.get("sessionId") or ""))
+
+def get_tool_name(payload: dict) -> str:
+    return (
+        (payload.get("toolCall") or {}).get("name")
+        or payload.get("toolName")
+        or payload.get("tool_name")
+        or payload.get("tool")
+        or payload.get("hook", {}).get("toolName")
+        or ""
+    )
+
+
+def get_tool_input(payload: dict) -> dict:
+    candidate = payload.get("toolInput") or payload.get("tool_input") or (payload.get("toolCall") or {}).get("args") or payload.get("input")
+    return candidate if isinstance(candidate, dict) else {}
+
 def native_pretool_denial(runtime: str, message: str) -> int:
     """Deny without granting or bypassing the runtime's own permissions."""
     if runtime == "antigravity":
@@ -53,11 +72,10 @@ def is_same_session_cache_policy_registration(runtime: str, payload: dict, task:
         if not tokens or any(token and set(token) <= set(";&|<>") for token in tokens):
             return False
         executable = tokens.pop(0)
-        if executable.casefold() not in {"py", "py.exe", "python", "python.exe", "python3", "python3.exe"}:
-            from hermes_verification_admission import APPROVED_EXECUTABLE
-            if Path(executable).resolve() != APPROVED_EXECUTABLE.resolve():
-                return False
-        while tokens and re.fullmatch(r"-3(?:\.\d+)?|-B", tokens[0]):
+        from hermes_verification_admission import canonical_caller
+        if not canonical_caller(executable):
+            return False
+        if tokens[:1] == ["-B"]:
             tokens.pop(0)
         if tokens[:2] == ["-X", "utf8"]:
             del tokens[:2]
@@ -118,8 +136,9 @@ def handle_pre_tool(runtime: str, payload: dict, *, registry: dict | None = None
             return 0
         cache = cache_gate_result(task)
         if cache is not None and not cache.get("allow_generation", False):
-            # STALE never authorizes writes or promotion. Only the fixed offline
-            # runner with exact current-session/source binding can revalidate.
+            # Raw STALE admits only this bounded verifier, never promotion.
+            # The Hermes adapter's approved advisory projection is separate:
+            # it maps STALE to MISS before reaching this branch.
             from hermes_verification_admission import admits_verification
             if cache.get("outcome") == "STALE" and admits_verification(runtime, payload, task):
                 return 0
