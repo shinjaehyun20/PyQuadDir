@@ -28,7 +28,7 @@ Raw session binding and receipts remain private outside this carrier. No Golden 
 
 New startup helper is **INACTIVE / FAIL-CLOSED**. Installed write guard still pins its pre-repair SHA (shown in scoped excerpt); no silent hash-pin refresh occurred. Real installed Python inventory rejects an unbound user-site root. No real Python environment is blessed; arbitrary executable startup code is unsupported. No new EXE was built under the repaired guard. Python-level inventory/audit is not an OS sandbox or proof against hostile trusted code, TOCTOU or arbitrary dynamic native imports.
 
-Product source/build revision: 85e9aabe2effdc71e03ca7ccfef372f8d3e07550. Prior formal EXE SHA-256 BCDADE47AC70102B046FAD5A4209E58391153FF2EAC732ED46148754A0215D1F39, PE 3.1.1.0. Prior archive receipt: 1078 members, five targeted MSVC DLLs absent. Prior GUI smoke: four panes PASS; About invocation timeout at 180 seconds; later flows UNTESTED. These separate prior receipts were not rerun or repaired here. Existing test/modal process remains untouched.
+Product source/build revision: 85e9aabe2effdc71e03ca7ccfef372f8d3e07550. Prior formal EXE SHA-256 BCDADE47AC70102B046FAD5A4209E58391153FF2EAC732ED46148754A0215D1F (39363963 bytes), PE 3.1.1.0. Prior archive receipt: 1078 members, five targeted MSVC DLLs absent. Prior GUI smoke: four panes PASS; About invocation timeout at 180 seconds; later flows UNTESTED. These separate prior receipts were not rerun or repaired here. Existing test/modal process remains untouched.
 
 ## Decision requested
 
