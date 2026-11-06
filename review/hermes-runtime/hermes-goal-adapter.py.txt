@@ -1,0 +1,190 @@
+"""Hermes-only applicability projection; shared engines and registry remain read-only."""
+import sys
+import json
+from pathlib import Path
+
+STACK = Path('D:/workspace/tools/stack')
+sys.path.insert(0, str(STACK))
+import goal_registry as native
+import warp_cache_dispatch_guard as cache
+
+_payload = {}
+
+
+def norm(value):
+    return str(value).replace('\\', '/').casefold()
+
+
+def applicability(row, task, payload):
+    """Use canonical references and declared capability domains, not substring rank.
+    Unknown artifact domains stay fail-closed. No content is evaluated as code.
+    """
+    policy = task.get('cache_policy') or {}
+    goal = norm(task.get('goal', ''))
+    query = norm(policy.get('query') or goal)
+    canonical = norm(row['canonical_path'])
+    inputs = [norm(r.get('path', '')) for r in policy.get('inputs', []) if isinstance(r, dict)]
+    tool = native.get_tool_input(payload)
+    # Content/old_string/new_string are payload data, not applicability intent.
+    refs = norm(json.dumps({k: tool[k] for k in ('path', 'file_path', 'source', 'destination', 'command') if k in tool}, ensure_ascii=False))
+    explicit = (policy.get('case_id') == row['case_id'] or canonical in refs
+                or canonical in inputs or canonical in goal or canonical in query
+                or bool(policy.get('input_fingerprint')) and policy.get('input_fingerprint') == row['input_fingerprint'])
+    if explicit:
+        return True, 'explicit canonical/case/input binding'
+    text = norm(' '.join([row['summary'], row['kind'], row['canonical_path'], *row.get('graph_refs', [])]))
+    if not any(term in text for term in query.split()):
+        return False, 'no lexical proposal'
+    tags = set(row.get('graph_refs', []))
+    if row['kind'] == 'artifact':
+        if 'task:wylie-remote-work-report' in tags:
+            report_intent = any(word in goal + ' ' + query + ' ' + refs + ' ' + ' '.join(inputs) for word in (
+                '재택업무보고', '재택근무보고', '재택보고', 'remote work report',
+                'remote-work-report', 'weeklyreport', 'actual-report-format', '14415', '14570'))
+            concrete = bool(inputs) or any(tool.get(k) for k in ('path', 'file_path', 'command', 'code'))
+            if concrete and not report_intent:
+                return False, 'declared task:wylie-remote-work-report differs from concrete non-report operation'
+        return True, 'unknown or matching artifact domain retained fail-closed'
+    basename = canonical.rsplit('/', 1)[-1]
+    if basename in goal or basename in query or basename in refs:
+        return True, 'full canonical source filename reference'
+    for tag in tags:
+        if tag.startswith(('capability:', 'task:')):
+            identity = norm(tag.split(':', 1)[1])
+            if identity in goal or identity in query:
+                return True, 'declared capability reference'
+    return False, 'generic overlap is not a canonical source/capability binding'
+
+
+def projected(task, payload=None, registry=None):
+    policy = task.get('cache_policy')
+    if policy is None:
+        return None
+    if not isinstance(policy, dict):
+        return cache.decision('ERROR', 'cache_policy must be an object')
+    registry = Path(registry or native.WARP_CACHE_REGISTRY)
+    try:
+        for source in policy.get('inputs', []):
+            if not isinstance(source, dict) or not Path(source['path']).is_absolute():
+                raise ValueError('invalid input reference')
+            if cache.sha256_file(Path(source['path'])) != source['sha256']:
+                return cache.decision('INPUT_MISMATCH', 'Declared source input bytes changed')
+        raw = registry.read_bytes()
+        if len(raw) > cache.MAX_REGISTRY_BYTES:
+            raise ValueError('registry exceeds bounded size')
+        data = json.loads(raw.decode('utf-8-sig'))
+        if data.get('schema') != cache.SCHEMA or not isinstance(data.get('cases'), list):
+            raise ValueError('incompatible registry')
+        seen, applicable, excluded = set(), [], []
+        for row in data['cases']:
+            cache._validate_row(row)
+            if row['case_id'] in seen:
+                raise ValueError('duplicate case_id')
+            seen.add(row['case_id'])
+            yes, reason = applicability(row, task, payload or {})
+            if policy.get('case_id'):
+                yes = row['case_id'] == policy['case_id']
+            if yes:
+                applicable.append(row)
+            else:
+                excluded.append({'case_id': row['case_id'], 'reason': reason})
+        if policy.get('case_id') and not applicable:
+            return cache.decision('NOT_FOUND', 'Expected explicit case is missing')
+        if not applicable:
+            result = cache.decision('MISS', 'Validated registry; no applicable canonical source or artifact domain')
+        else:
+            results = [cache.evaluate(registry, policy.get('query') or task['goal'],
+                        input_fingerprint=policy.get('input_fingerprint', ''), case_id=row['case_id'])
+                       for row in applicable]
+            hits = [r for r in results if r['outcome'] == 'HIT_ARTIFACT']
+                        # User policy: STALE is advisory, not an execution veto.
+            results = [
+                cache.decision(
+                    'MISS',
+                    'STALE enforcement disabled by user; cache record unchanged'
+                ) if r['outcome'] == 'STALE' else r
+                for r in results
+            ]
+            blocking = [r for r in results if not r['allow_generation']]
+            result = cache.decision('AMBIGUOUS', 'Multiple applicable artifact pointers require an exact case') if len(hits) > 1 else (blocking[0] if blocking else results[0])
+        result['applicability_scope'] = 'hermes-native-only/v1'
+        result['excluded'] = excluded
+        return result
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        return cache.decision('ERROR', f'Applicability contract error: {exc}')
+
+
+def scoped_cache(task):
+    return projected(task, _payload)
+
+
+def first_goal_bootstrap(payload, registry, session):
+    """Admit only first, same-session canonical control metadata, never artifacts."""
+    import shlex
+    import shutil
+    if (not session or payload.get('session_id') != session
+            or native.get_tool_name(payload).lower() != 'terminal'):
+        return False
+    # Do not overwrite a pointer, reclaim a finished task, or migrate an owner.
+    if ((registry.get('active_by_session') or {}).get('hermes', {}).get(session)
+            or any(t.get('runtime') == 'hermes' and t.get('owner_session_id') == session
+                   for t in registry.get('tasks', {}).values() if isinstance(t, dict))):
+        return False
+    tool = native.get_tool_input(payload)
+    if set(tool) - {'command', 'workdir', 'timeout'}:
+        return False
+    if Path(tool.get('workdir') or payload.get('cwd') or '').resolve() != STACK.parent.parent.resolve():
+        return False
+    command = native.get_command(tool)
+    if any(c in command for c in ('$','`','\n','\r')):
+        return False
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=';&|<>')
+        lexer.whitespace_split, lexer.commenters = True, ''
+        argv = list(lexer)
+        if any(t and set(t) <= set(';&|<>') for t in argv) or len(argv) < 2:
+            return False
+        executable = shutil.which(argv.pop(0))
+        canonical_cli = Path(__file__).resolve().parent.parent / 'hermes-agent' / 'venv' / 'Scripts' / 'python.exe'
+        if not executable or Path(executable).resolve() != canonical_cli.resolve():
+            return False
+        if argv[:1] == ['-B']:
+            argv.pop(0)
+        if argv[:2] == ['-X', 'utf8']:
+            del argv[:2]
+        if not argv or Path(argv.pop(0)).resolve() != Path(native.__file__).resolve():
+            return False
+        values = {}
+        while argv:
+            key = argv.pop(0)
+            if key not in {'--runtime', '--session-id', '--action', '--prompt'} or key in values or not argv:
+                return False
+            values[key] = argv.pop(0)
+        return (set(values) == {'--runtime', '--session-id', '--action', '--prompt'}
+                and values['--runtime'] == 'hermes' and values['--session-id'] == session
+                and values['--action'] == 'lock-goal' and bool(values['--prompt'].strip()))
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def main():
+    global _payload
+    if sys.argv[1:] != ['--runtime', 'hermes', '--event', 'NativePreToolUse']:
+        return native.native_pretool_denial('hermes', 'Adapter accepts only native Hermes pre-tool events')
+    try:
+        _payload = json.loads(sys.stdin.readline())
+        session = native.payload_session_id('hermes', _payload)
+        registry = native.load_registry()
+        task = native.active_task(registry, 'hermes', session) if session else None
+        if native.is_mutating_tool('hermes', native.get_tool_name(_payload), native.get_tool_input(_payload)):
+            if task is None and first_goal_bootstrap(_payload, registry, session):
+                return 0
+            if not task or task.get('owner_session_id') != session or task.get('runtime') != 'hermes':
+                return native.native_pretool_denial('hermes', 'No matching same-session Hermes goal owner')
+        native.cache_gate_result = scoped_cache
+        return native.handle_pre_tool('hermes', _payload, registry=registry)
+    except Exception as exc:
+        return native.native_pretool_denial('hermes', f'Adapter failed closed: {type(exc).__name__}')
+
+if __name__ == '__main__':
+    raise SystemExit(main())

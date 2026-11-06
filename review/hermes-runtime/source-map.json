@@ -1,0 +1,63 @@
+{
+  "purpose": "review-only exact source snapshots; not installed runtime or portable package",
+  "product_source_revision": "85e9aabe2effdc71e03ca7ccfef372f8d3e07550",
+  "members": [
+    {
+      "review_file": "hermes-goal-adapter.py.txt",
+      "source_basename": "hermes-goal-adapter.py",
+      "source_sha256": "6a808ff5b6eb31ca4a330753742898b387182567788beab58817327d3c7ed8dc",
+      "lines": [
+        1,
+        190
+      ],
+      "review_sha256": "6a808ff5b6eb31ca4a330753742898b387182567788beab58817327d3c7ed8dc",
+      "redactions": []
+    },
+    {
+      "review_file": "hermes_verification_admission.py.txt",
+      "source_basename": "hermes_verification_admission.py",
+      "source_sha256": "7c6ab54096c8dae6f5798452808c2780838fafe171043d5809bc70093aab4d0e",
+      "lines": [
+        1,
+        206
+      ],
+      "review_sha256": "7c6ab54096c8dae6f5798452808c2780838fafe171043d5809bc70093aab4d0e",
+      "redactions": []
+    },
+    {
+      "review_file": "test_hermes_verification_admission.py.txt",
+      "source_basename": "test_hermes_verification_admission.py",
+      "source_sha256": "cda3b3215ab76def6744532e4b5a070b114faa69519096922f2970b2d9775ad7",
+      "lines": [
+        1,
+        271
+      ],
+      "review_sha256": "47244568a39eb5ada397b53f2b02ed291f03624a7a7c9f6de99dfa1eecfeaaf2",
+      "redactions": [
+        "Personal home path literal replaced with equivalent Path.home expression; no decision logic changed."
+      ]
+    },
+    {
+      "review_file": "goal_registry-admission.py.txt",
+      "source_basename": "goal_registry.py",
+      "source_sha256": "4fd208dbb6581ae2f57b68fe7321fd99db5fd4ec7af033e0b5ecfe1a99af2d5e",
+      "lines": [
+        2892,
+        3047
+      ],
+      "review_sha256": "07fe00918bfd25fe6481e0d1dbfddf296372c70e07ad69158ef196855f5f3936",
+      "redactions": []
+    },
+    {
+      "review_file": "warp_cache_dispatch_guard.py.txt",
+      "source_basename": "warp_cache_dispatch_guard.py",
+      "source_sha256": "ea5432b315c464101bcf1cfc3a1ce3b9357069df6dfd9cd50315069baf1ed212",
+      "lines": [
+        1,
+        181
+      ],
+      "review_sha256": "ea5432b315c464101bcf1cfc3a1ce3b9357069df6dfd9cd50315069baf1ed212",
+      "redactions": []
+    }
+  ]
+}

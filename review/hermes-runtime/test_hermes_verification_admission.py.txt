@@ -1,0 +1,271 @@
+"""Offline-only admission regressions. No API, UI or external processes."""
+import contextlib
+import copy
+import io
+import json
+from pathlib import Path
+import shlex
+import sys
+import time
+import unittest
+from unittest.mock import patch
+import hermes_verification_admission as v
+import goal_registry as g
+
+class AdmissionTests(unittest.TestCase):
+    def setUp(self):
+        self.task = {'task_id':'offline-admission-fixture','runtime':'hermes','owner_session_id':'fixture-session','status':'active','mode':'execute'}
+        self.binding = {'runtime':'hermes','session_id':'fixture-session','task_id':self.task['task_id'],
+            'executable':str(v.APPROVED_EXECUTABLE),'cwd':str(v.WORKSPACE),'offline_only':True,
+            'output_scope':str(v.WORKSPACE / 'tmp' / self.task['task_id']), 'expires_at':time.time()+600,
+            'inputs':[{'path':str(p),'sha256':v.digest(p)} for p in [v.RUNNER,v.TEST,v.ROOT/'goal_registry.py',v.ROOT/'warp_cache_dispatch_guard.py']]}
+        self.binding['argv']=[str(v.APPROVED_EXECUTABLE),'-B',str(v.RUNNER).replace('\\','/'),'--session-id','fixture-session','--task-id',self.task['task_id']]
+        self.task['cache_policy']={'verification_only':self.binding}
+        self.payload={'session_id':'fixture-session','tool_name':'terminal','tool_input':{
+            'command':' '.join(shlex.quote(s) for s in self.binding['argv']),'workdir':str(v.WORKSPACE)}}
+    def allowed(self):
+        return v.admits_verification('hermes',self.payload,self.task)
+    def test_current_exact_binding_allowed(self):
+        self.assertTrue(self.allowed())
+    def test_binding_unknown_missing_invalid_hash_fields_denied(self):
+        for key in self.binding:
+            b=copy.deepcopy(self.binding);del b[key]
+            with self.subTest(missing=key):self.assertFalse(v.validate(b,self.task,'fixture-session'))
+        for key,value in [('unknown',True),('expires_at',0),('expires_at',float('nan')),('runtime','codex'),('session_id','other'),('task_id','other'),('offline_only',False),('cwd',str(v.ROOT)),('executable','python'),('output_scope',str(v.WORKSPACE/'output'))]:
+            b=copy.deepcopy(self.binding);b[key]=value
+            with self.subTest(key=key):self.assertFalse(v.validate(b,self.task,'fixture-session'))
+        for sha in ['', 'a'*64, 'unknown']:
+            b=copy.deepcopy(self.binding);b['inputs'][0]['sha256']=sha
+            self.assertFalse(v.validate(b,self.task,'fixture-session'))
+    def test_path_traversal_and_arbitrary_verifier_denied(self):
+        b=copy.deepcopy(self.binding);task=copy.deepcopy(self.task)
+        task['task_id']='../../output';b['task_id']=task['task_id'];b['output_scope']=str(v.WORKSPACE/'tmp'/task['task_id'])
+        self.assertFalse(v.validate(b,task,'fixture-session'))
+        for argv in [[sys.executable,'-c','pass'],self.binding['argv']+['--skip']]:
+            b=copy.deepcopy(self.binding);b['argv']=argv
+            self.assertFalse(v.validate(b,self.task,'fixture-session'))
+        b=copy.deepcopy(self.binding);b['inputs']=b['inputs'][:-1]
+        self.assertFalse(v.validate(b,self.task,'fixture-session'))
+
+    def test_source_change_during_verification_is_rejected(self):
+        self.assertTrue(self.allowed())
+        with patch.object(v,'digest',return_value='0'*64):self.assertFalse(self.allowed())
+    def test_shell_flags_chains_wrong_cwd_and_extra_tool_fields_denied(self):
+        for suffix in ['; whoami',' && whoami',' | cat',' > x','\nwhoami',' --skip',' --install',' $HOME',' `whoami`']:
+            p=copy.deepcopy(self.payload);p['tool_input']['command']+=suffix
+            self.assertFalse(v.admits_verification('hermes',p,self.task))
+        for field,value in [('workdir',str(v.ROOT)),('background',True),('env',{'X':'Y'})]:
+            p=copy.deepcopy(self.payload);p['tool_input'][field]=value
+            self.assertFalse(v.admits_verification('hermes',p,self.task))
+    def test_other_runtime_session_owner_and_states_denied(self):
+        self.assertFalse(v.admits_verification('codex',self.payload,self.task))
+        p=copy.deepcopy(self.payload);p['session_id']='other'
+        self.assertFalse(v.admits_verification('hermes',p,self.task))
+        for key,value in [('owner_session_id','other'),('status','blocked'),('mode','plan'),('work_state','BLOCKED')]:
+            task=copy.deepcopy(self.task);task[key]=value
+            self.assertFalse(v.admits_verification('hermes',self.payload,task))
+    def hook(self,payload,outcome='STALE'):
+        out=io.StringIO()
+        with patch.object(g,'active_task',return_value=self.task),patch.object(g,'cache_gate_result',return_value={'outcome':outcome,'allow_generation':False,'reason':'fixture'}),contextlib.redirect_stdout(out):
+            g.handle_pre_tool('hermes',payload,registry={})
+        return out.getvalue()
+    def test_consumer_admits_only_stale_verifier(self):
+        self.assertEqual(self.hook(self.payload),'')
+        for outcome in ['INPUT_REQUIRED','INPUT_MISMATCH','ERROR','HIT_ARTIFACT']:
+            self.assertEqual(json.loads(self.hook(self.payload,outcome))['action'],'block')
+    def test_ordinary_write_stays_blocked(self):
+        for name in ['write_file','patch','terminal']:
+            p={'session_id':'fixture-session','tool_name':name,'tool_input':{'path':'D:/workspace/output/not-created','command':'rm D:/workspace/output/not-created'}}
+            self.assertEqual(json.loads(self.hook(p))['action'],'block')
+    @unittest.skipUnless(hasattr(v, 'OFFLINE_SCOPE'), 'requires actual sandbox runner')
+    def test_actual_offline_sandbox_denies_network_process_and_production_write(self):
+        import socket
+        import subprocess
+        with self.assertRaises(PermissionError):socket.socket()
+        with self.assertRaises(PermissionError):subprocess.Popen([sys.executable,'-c','pass'])
+        target=v.WORKSPACE/'output'/'admission-must-not-exist.txt'
+        with self.assertRaises(PermissionError):target.write_text('forbidden')
+        with self.assertRaises(PermissionError):(target.parent/'admission-forbidden-dir').mkdir()
+        target=v.OFFLINE_SCOPE/'allowed-probe.txt'
+        with target.open('x') as stream:stream.write('offline-scope-only')
+        self.assertEqual(target.read_text(),'offline-scope-only');target.unlink()
+
+    @unittest.skipUnless(hasattr(v, 'OFFLINE_SCOPE'), 'requires actual fixed runner')
+    def test_hardlink_existing_output_and_outside_hash_unchanged(self):
+        import os
+        scope = v.OFFLINE_SCOPE
+        self.assertGreaterEqual((scope/'hardlink.txt').stat().st_nlink, 2)
+        for name in ['hardlink.txt', 'existing.txt']:
+            for mode in ['w', 'a', 'r+', 'x']:
+                with self.subTest(name=name, mode=mode), self.assertRaises(PermissionError):
+                    with (scope/name).open(mode):pass
+            with self.assertRaises(PermissionError):
+                os.open(scope/name, os.O_WRONLY | os.O_TRUNC)
+        self.assertEqual(v.digest(v.FIXTURE_ORIGINAL), v.FIXTURE_HASH)
+        self.assertEqual((scope/'existing.txt').read_text(), 'existing-output')
+
+    @unittest.skipUnless(hasattr(v, 'OFFLINE_SCOPE'), 'requires actual fixed runner')
+    def test_actual_symlink_junction_parent_alias_fail_closed(self):
+        import os
+        for name in ['symlink.txt', 'parent-alias', 'junction']:
+            with self.subTest(name=name):
+                if v.WINDOWS_CAPABILITIES.get(name) == 'supported':
+                    target = v.OFFLINE_SCOPE/name
+                    self.assertTrue(target.lstat().st_file_attributes & 0x400)
+                    if name != 'symlink.txt':target /= 'new-file.txt'
+                    with self.assertRaises(PermissionError):target.open('x')
+                else:
+                    # No feature-success claim: creation itself must remain denied.
+                    with self.assertRaises(PermissionError):
+                        os.symlink(v.FIXTURE_ORIGINAL, v.OFFLINE_SCOPE/('denied-'+name))
+        self.assertEqual(v.digest(v.FIXTURE_ORIGINAL), v.FIXTURE_HASH)
+
+    @unittest.skipUnless(hasattr(v, 'OFFLINE_SCOPE'), 'requires actual fixed runner')
+    def test_namespace_fd_and_alias_creation_denied(self):
+        import os
+        for path in [str(v.OFFLINE_SCOPE/'ads')+':stream', '\\\\?\\'+str(v.OFFLINE_SCOPE/'extended'), str(v.OFFLINE_SCOPE/'..'/'outside.txt'), 1]:
+            with self.subTest(path=path), self.assertRaises(PermissionError):
+                v.check_open(path, 'x', os.O_CREAT|os.O_EXCL|os.O_WRONLY, v.OFFLINE_SCOPE)
+        with self.assertRaises(PermissionError):os.link(v.FIXTURE_ORIGINAL, v.OFFLINE_SCOPE/'new-link')
+        with self.assertRaises(PermissionError):os.truncate(v.OFFLINE_SCOPE/'existing.txt', 0)
+        with self.assertRaises(PermissionError):
+            v.make_audit(v.OFFLINE_SCOPE)('os.remove', ('existing.txt', 123))
+
+    @unittest.skipUnless(hasattr(v, 'OFFLINE_SCOPE'), 'requires actual fixed runner')
+    def test_exclusive_new_file_flags_and_no_reuse(self):
+        import os
+        target=v.OFFLINE_SCOPE/'exclusive.txt'
+        flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os, 'O_NOFOLLOW', 0)
+        fd=os.open(target, flags)
+        try:os.write(fd, b'new-only')
+        finally:os.close(fd)
+        self.assertEqual(target.read_bytes(), b'new-only')
+        with self.assertRaises(PermissionError):os.open(target, flags)
+        target.unlink()
+        for flags in [os.O_WRONLY|os.O_CREAT, os.O_WRONLY|os.O_TRUNC]:
+            with self.assertRaises(PermissionError):os.open(target, flags)
+
+    @unittest.skipUnless(hasattr(v, 'OFFLINE_SCOPE'), 'requires actual fixed runner')
+    def test_scope_bootstrap_alias_and_child_runtime_fail_closed(self):
+        import os
+        if v.WINDOWS_CAPABILITIES.get('junction') == 'supported':
+            alias=v.OFFLINE_SCOPE/'junction'
+            with self.assertRaises(PermissionError):v.make_scope(alias)
+            with self.assertRaises(PermissionError):v.checked_path(alias/'child')
+        with self.assertRaises(OSError):v.make_scope(v.OFFLINE_SCOPE/'existing.txt')
+        guard=v.make_audit(v.OFFLINE_SCOPE)
+        for event in ['subprocess.Popen', '_winapi.CreateProcess', 'os.posix_spawn', 'os.fork', 'os.startfile/2', 'ctypes.dlopen']:
+            with self.subTest(event=event), self.assertRaises(PermissionError):guard(event, ())
+        with self.assertRaises(PermissionError):guard('os.mkdir', (str(v.OFFLINE_SCOPE/'relative'), 511, 123))
+        # Exercise unique-directory allocation under the real guard.
+        first,_=v.make_scope(v.OFFLINE_SCOPE)
+        second,_=v.make_scope(v.OFFLINE_SCOPE)
+        self.assertNotEqual(first,second)
+        self.assertEqual(v.digest(v.FIXTURE_ORIGINAL),v.FIXTURE_HASH)
+
+    def test_metadata_absolute_canonical_caller_is_not_hook_host(self):
+        policy={'query':'goal_registry.py','input_fingerprint':'synthetic-fixture',
+                'inputs':self.binding['inputs']}
+        def payload(executable):
+            argv=[executable,str(v.ROOT/'goal_registry.py'),'--runtime','hermes',
+                  '--action','update-task','--session-id','fixture-session',
+                  '--task-id',self.task['task_id'],'--set-json',json.dumps({'cache_policy':policy})]
+            return {'session_id':'fixture-session','tool_name':'terminal',
+                    'tool_input':{'command':' '.join(shlex.quote(s) for s in argv)}}
+        with patch.object(sys,'executable','C:/different-hook-host/python.exe'):
+            self.assertTrue(g.is_same_session_cache_policy_registration('hermes',payload(str(v.APPROVED_EXECUTABLE)),self.task))
+            self.assertFalse(g.is_same_session_cache_policy_registration('hermes',payload(sys.executable),self.task))
+
+    def test_metadata_bootstrap_validates_admission(self):
+        policy={'query':'goal_registry.py warp_cache_dispatch_guard.py','input_fingerprint':'actual-fixture','inputs':self.binding['inputs'],'verification_only':self.binding}
+        def payload():
+            argv=['python',str(v.ROOT/'goal_registry.py'),'--runtime','hermes','--action','update-task','--session-id','fixture-session','--task-id',self.task['task_id'],'--set-json',json.dumps({'cache_policy':policy})]
+            return {'session_id':'fixture-session','tool_name':'terminal','tool_input':{'command':' '.join(shlex.quote(s) for s in argv)}}
+        self.assertTrue(g.is_same_session_cache_policy_registration('hermes',payload(),self.task))
+        policy['verification_only']['inputs'][0]['sha256']='0'*64
+        self.assertFalse(g.is_same_session_cache_policy_registration('hermes',payload(),self.task))
+
+class FirstGoalBootstrapTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        source = Path.home() / 'AppData/Local/hermes/hooks/hermes-goal-adapter.py'
+        spec = importlib.util.spec_from_file_location('bootstrap_adapter', source)
+        cls.adapter = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.adapter)
+
+    def setUp(self):
+        self.argv = [str(v.APPROVED_EXECUTABLE), str(Path(g.__file__).resolve()), '--runtime', 'hermes',
+                     '--session-id', 'fixture-first-session', '--action', 'lock-goal',
+                     '--prompt', 'Repair first goal metadata bootstrap with bounded native pytest regression tests']
+        self.payload = {'session_id': 'fixture-first-session', 'tool_name': 'terminal',
+                        'cwd': 'D:/workspace', 'tool_input': {'workdir': 'D:/workspace',
+                        'command': self.command()}}
+        self.registry = {'tasks': {}, 'active_by_session': {}}
+
+    def command(self):
+        return ' '.join(shlex.quote(s.replace('\\', '/')) for s in self.argv)
+
+    def run_hook(self, task=None):
+        output = io.StringIO()
+        a = self.adapter
+        with patch.object(sys, 'argv', ['adapter', '--runtime', 'hermes', '--event', 'NativePreToolUse']), \
+             patch.object(sys, 'stdin', io.StringIO(json.dumps(self.payload)+'\n')), \
+             patch.object(a.native, 'load_registry', return_value=self.registry), \
+             patch.object(a.native, 'active_task', return_value=task), \
+             patch.object(a.native, 'is_mutating_tool', return_value=True), \
+             patch.object(a, 'scoped_cache', return_value={'outcome':'STALE', 'allow_generation':False, 'reason':'fixture'}), \
+             contextlib.redirect_stdout(output):
+            self.assertTrue(a.native.is_mutating_tool('hermes', 'terminal', self.payload['tool_input']))
+            self.assertEqual(a.main(), 0)
+        return output.getvalue()
+
+    def test_first_same_session_native_lock_reaches_mutating_branch(self):
+        self.assertTrue(self.adapter.first_goal_bootstrap(self.payload, self.registry, 'fixture-first-session'))
+        self.assertEqual(self.run_hook(), '')
+
+    def test_canonical_caller_remains_allowed_with_different_hook_host(self):
+        with patch.object(sys, 'executable', 'C:/different-hook-host/python.exe'):
+            self.assertEqual(self.run_hook(), '')
+            self.argv[0] = sys.executable
+            self.payload['tool_input']['command'] = self.command()
+            self.assertEqual(json.loads(self.run_hook())['action'], 'block')
+
+    def test_wrong_session_runtime_script_executable_extra_arguments_and_chain_denied(self):
+        original = copy.deepcopy(self.argv)
+        for index, value in [(0,'not-the-native-python'), (1,'D:/workspace/tools/stack/fake.py'),
+                             (3,'codex'), (5,'other-session'), (7,'update-task'), (9,'')]:
+            with self.subTest(index=index):
+                self.argv = copy.deepcopy(original); self.argv[index] = value
+                self.payload['tool_input']['command'] = self.command()
+                self.assertEqual(json.loads(self.run_hook())['action'], 'block')
+        self.argv = original
+        for suffix in [' --task-id other', ' --runtime hermes', '; whoami', ' && whoami',
+                       ' | whoami', ' > D:/workspace/output/forbidden', '\nwhoami']:
+            with self.subTest(suffix=suffix):
+                self.payload['tool_input']['command'] = self.command()+suffix
+                self.assertEqual(json.loads(self.run_hook())['action'], 'block')
+
+    def test_existing_owner_pointer_and_finished_claim_denied(self):
+        for status in ['active','done']:
+            self.registry['tasks'] = {'existing': {'runtime':'hermes', 'owner_session_id':'fixture-first-session', 'status':status}}
+            self.assertEqual(json.loads(self.run_hook())['action'], 'block')
+        self.registry['tasks'] = {}
+        self.registry['active_by_session'] = {'hermes': {'fixture-first-session':'missing-task'}}
+        self.assertEqual(json.loads(self.run_hook())['action'], 'block')
+
+    def test_unrelated_command_and_tool_fields_denied(self):
+        self.payload['tool_input']['command'] = 'python -c "open(\'D:/workspace/output/forbidden\',\'w\')"'
+        self.assertEqual(json.loads(self.run_hook())['action'], 'block')
+        self.payload['tool_input']['command'] = self.command()
+        self.payload['tool_input']['env'] = {'OTHER':'value'}
+        self.assertEqual(json.loads(self.run_hook())['action'], 'block')
+
+    def test_existing_owner_stale_ordinary_write_stays_denied(self):
+        self.payload['tool_input']['command'] = 'python -c "print(\'ordinary mutation\')"'
+        task = {'runtime':'hermes', 'owner_session_id':'fixture-first-session',
+                'status':'active', 'mode':'execute', 'cache_policy':{}}
+        self.assertIn('Warp Cache STALE', json.loads(self.run_hook(task))['message'])
+
+
+if __name__=='__main__':unittest.main(verbosity=2)

@@ -1,0 +1,206 @@
+"""Bounded offline verifier for Hermes STALE revalidation; never promotes cache."""
+from __future__ import annotations
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import stat
+import tempfile
+
+
+def checked_path(path, scope=None):
+    """Reject aliases before resolving. Trusted tests only; not race-proof."""
+    if not isinstance(path, (str, os.PathLike)):
+        raise PermissionError('path-only filesystem access required')
+    raw = os.fspath(path)
+    if not isinstance(raw, str) or '..' in Path(raw).parts or raw.startswith(('\\\\', '//')):
+        raise PermissionError('unsupported path namespace')
+    p = Path(os.path.abspath(raw))
+    if os.name == 'nt' and (':' in str(p)[2:] or not p.drive or len(p.drive) != 2):
+        raise PermissionError('unsupported Windows path namespace')
+    if scope is not None and not p.is_relative_to(scope):
+        raise PermissionError('verifier write outside output scope')
+    for entry in [*reversed(p.parents), p]:
+        try:
+            info = entry.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(info.st_mode) or (getattr(info, 'st_file_attributes', 0) & 0x400):
+            raise PermissionError('reparse/symlink path forbidden')
+        if not stat.S_ISDIR(info.st_mode) and (info.st_nlink != 1 or entry != p):
+            raise PermissionError('hardlink or non-directory parent forbidden')
+    return p
+
+
+def check_open(path, mode, flags, scope):
+    writing = (isinstance(mode, str) and any(c in mode for c in 'wax+')) or (isinstance(flags, int) and flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND))
+    if not writing:
+        return
+    p = checked_path(path, scope)
+    # No existing output is ever opened for writing, including single-link files.
+    if p.exists() or p.is_symlink() or not isinstance(flags, int) or not flags & os.O_EXCL or not flags & os.O_CREAT:
+        raise PermissionError('only exclusive new output creation is allowed')
+
+
+def make_scope(output_scope):
+    """Fresh private directory per run; no reuse of caller-selected outputs."""
+    base = checked_path(output_scope)
+    base.mkdir(exist_ok=True)
+    checked_path(base)
+    private = Path(tempfile.mkdtemp(prefix='verification-', dir=base))
+    scope = private / 'output'
+    scope.mkdir()
+    return private, scope
+
+
+def make_audit(scope):
+    def audit(event, values):
+        if event.startswith(('socket.', 'subprocess.', 'ctypes.', 'winreg.', 'os.exec', 'os.spawn', 'os.posix_spawn', 'os.fork', 'os.startfile', '_winapi.CreateProcess')) or event == 'os.system':
+            raise PermissionError('offline verifier forbids external execution/network')
+        if event == 'open':
+            check_open(*values, scope)
+        if event in {'os.link', 'os.symlink', 'os.rename', 'os.truncate', 'os.chmod', 'os.utime'}:
+            raise PermissionError('offline verifier forbids alias/metadata mutation')
+        if event in {'os.remove', 'os.rmdir', 'os.mkdir'}:
+            if len(values) > (2 if event == 'os.mkdir' else 1) and values[-1] not in (-1, None):
+                raise PermissionError('dir_fd unsupported')
+            checked_path(values[0], scope)
+    return audit
+import sys
+import time
+import unittest
+
+ROOT = Path(__file__).resolve().parent
+RUNNER = Path(__file__).resolve()
+TEST = ROOT / 'test_hermes_verification_admission.py'
+WORKSPACE = ROOT.parent.parent
+# Native hook and terminal can use different interpreters. Pin the approved
+# Hermes runtime executable, not whichever interpreter imported this module.
+APPROVED_EXECUTABLE = Path.home() / 'AppData/Local/hermes/hermes-agent/venv/Scripts/python.exe'
+
+def digest(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+def validate(binding, task, session):
+    """Return False for unknown fields, stale bytes or another execution owner."""
+    try:
+        fields = {'runtime', 'session_id', 'task_id', 'executable', 'cwd', 'argv',
+                  'inputs', 'output_scope', 'expires_at', 'offline_only'}
+        if not isinstance(binding, dict) or set(binding) != fields:
+            return False
+        if (binding['runtime'] != 'hermes' or binding['session_id'] != session
+                or binding['task_id'] != task['task_id'] or not session
+                or task.get('owner_session_id') != session
+                or task.get('runtime', 'hermes') != 'hermes'
+                or task.get('mode') != 'execute' or task.get('status') != 'active'
+                or task.get('work_state') == 'BLOCKED' or binding['offline_only'] is not True):
+            return False
+        if not re.fullmatch(r'[A-Za-z0-9_-]+', task['task_id']) or not re.fullmatch(r'[A-Za-z0-9_-]+', session):
+            return False
+        expiry = binding['expires_at']
+        if isinstance(expiry, bool) or not isinstance(expiry, (int, float)) or not time.time() < expiry <= time.time() + 3600:
+            return False
+        if Path(binding['executable']).resolve() != APPROVED_EXECUTABLE.resolve():
+            return False
+        if Path(binding['cwd']).resolve() != WORKSPACE.resolve():
+            return False
+        if not Path(binding['output_scope']).is_absolute():
+            return False
+        scope = checked_path(binding['output_scope'])
+        if (not scope.is_absolute() or scope.resolve() != (WORKSPACE / 'tmp' / task['task_id']).resolve()
+                or not scope.resolve().is_relative_to(WORKSPACE.resolve() / 'tmp')):
+            return False
+        expected = [binding['executable'], '-B', str(RUNNER).replace('\\', '/'),
+                    '--session-id', session, '--task-id', task['task_id']]
+        if binding['argv'] != expected:
+            return False
+        inputs = binding['inputs']
+        if not isinstance(inputs, list) or not inputs:
+            return False
+        seen = set()
+        for row in inputs:
+            if not isinstance(row, dict) or set(row) != {'path', 'sha256'}:
+                return False
+            p = Path(row['path'])
+            if not p.is_absolute() or p.resolve() in seen or not re.fullmatch('[0-9a-f]{64}', row['sha256']):
+                return False
+            seen.add(p.resolve())
+            if digest(p) != row['sha256']:
+                return False
+        return {RUNNER, TEST, ROOT / 'goal_registry.py', ROOT / 'warp_cache_dispatch_guard.py'} <= seen
+    except (ValueError, TypeError, OSError, KeyError):
+        return False
+
+def admits_verification(runtime, payload, task):
+    if runtime != 'hermes' or payload.get('tool_name') != 'terminal':
+        return False
+    binding = (task.get('cache_policy') or {}).get('verification_only')
+    if not validate(binding, task, payload.get('session_id')):
+        return False
+    args = payload.get('tool_input') or {}
+    if set(args) - {'command', 'workdir', 'timeout'}:
+        return False
+    try:
+        if Path(args.get('workdir', '')).resolve() != Path(binding['cwd']).resolve():
+            return False
+        # Byte-exact canonical quoting excludes shell expansion, chains and flags.
+        command = ' '.join(shlex.quote(s) for s in binding['argv'])
+        return args.get('command') == command and not any(c in command for c in ('$','`','\n','\r',';','&','|','<','>'))
+    except (ValueError, TypeError):
+        return False
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(__doc__, allow_abbrev=False)
+    parser.add_argument('--session-id', required=True)
+    parser.add_argument('--task-id', required=True)
+    args = parser.parse_args()
+    import goal_registry as g
+    task = g.active_task(g.load_registry(), 'hermes', args.session_id)
+    binding = ((task or {}).get('cache_policy') or {}).get('verification_only')
+    if not task or args.task_id != task['task_id'] or not validate(binding, task, args.session_id) or Path.cwd().resolve() != WORKSPACE.resolve():
+        parser.error('invalid, expired or changed verification binding')
+    private, scope = make_scope(binding['output_scope'])
+    # Synthetic boundary fixtures only, all inside our new private task directory.
+    # Creation happens before the guard; no user/production paths are touched.
+    fixtures = private / 'fixtures'
+    fixtures.mkdir()
+    original = fixtures / 'original.txt'
+    original.write_text('synthetic-boundary-original')
+    (scope / 'existing.txt').write_text('existing-output')
+    os.link(original, scope / 'hardlink.txt')
+    capabilities = {'hardlink_nlink': original.stat().st_nlink}
+    for name, target, directory in [('symlink.txt', original, False), ('parent-alias', fixtures, True)]:
+        try:
+            os.symlink(target, scope / name, target_is_directory=directory)
+            capabilities[name] = 'supported'
+        except OSError as exc:
+            capabilities[name] = 'unsupported:' + str(exc.winerror if hasattr(exc, 'winerror') else exc.errno)
+    if os.name == 'nt':
+        import _winapi
+        try:
+            _winapi.CreateJunction(str(fixtures), str(scope / 'junction'))
+            capabilities['junction'] = 'supported'
+        except OSError as exc:
+            capabilities['junction'] = 'unsupported:' + str(exc.winerror)
+    os.environ['TMPDIR'] = os.environ['TMP'] = os.environ['TEMP'] = str(scope)
+    tempfile.tempdir = str(scope)
+    sys.dont_write_bytecode = True
+    globals().update(OFFLINE_SCOPE=scope, FIXTURE_ORIGINAL=original,
+                     FIXTURE_HASH=digest(original), WINDOWS_CAPABILITIES=capabilities)
+    sys.addaudithook(make_audit(scope))
+    print(json.dumps({'private_scope': str(scope), 'windows_capabilities': capabilities}))
+    suite = unittest.defaultTestLoader.discover(str(ROOT), pattern=TEST.name)
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    # Detect source changes during the test run as a hard verification failure.
+    unchanged = validate(binding, task, args.session_id)
+    print(json.dumps({'scope':'offline-focused-regression-only','source_unchanged':unchanged,
+                      'tests_run':result.testsRun,'passed':result.wasSuccessful() and unchanged,
+                      'golden_promoted':False}))
+    return 0 if result.wasSuccessful() and unchanged else 1
+
+if __name__ == '__main__':
+    sys.modules.setdefault('hermes_verification_admission', sys.modules[__name__])
+    raise SystemExit(main())

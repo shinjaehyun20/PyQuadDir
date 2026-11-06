@@ -1,0 +1,156 @@
+def native_pretool_denial(runtime: str, message: str) -> int:
+    """Deny without granting or bypassing the runtime's own permissions."""
+    if runtime == "antigravity":
+        result = {"decision": "deny", "reason": message}
+    elif runtime == "hermes":
+        result = {"action": "block", "message": message}
+    elif runtime == "copilot":
+        result = {"permissionDecision": "deny", "permissionDecisionReason": message}
+    else:
+        result = {"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                  "permissionDecision": "deny", "permissionDecisionReason": message}}
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def cache_gate_result(task: dict) -> dict | None:
+    """Use the existing cache only for an explicitly attached reuse contract.
+
+    Existing unscoped jobs are not silently migrated. This checks pointer
+    integrity, not acceptance. Never trust a task-supplied registry location.
+    """
+    policy = task.get("cache_policy")
+    if policy is None:
+        return None
+    from warp_cache_dispatch_guard import evaluate, decision
+    if not isinstance(policy, dict):
+        return decision("ERROR", "cache_policy must be an object; retain existing work.")
+    return evaluate(WARP_CACHE_REGISTRY, str(policy.get("query") or task.get("goal") or ""),
+                    input_fingerprint=policy.get("input_fingerprint", ""),
+                    case_id=policy.get("case_id", ""))
+
+
+def is_same_session_cache_policy_registration(runtime: str, payload: dict, task: dict) -> bool:
+    """Recognize bounded metadata bootstrap, not an artifact-write exemption.
+
+    The following artifact call still evaluates the registered cache policy.
+    Other sessions, task fields, runtimes and shell composition remain gated.
+    """
+    if runtime != "hermes" or get_tool_name(payload).lower() not in {"terminal", "exec_command"}:
+        return False
+    session = payload_session_id(runtime, payload)
+    if not session or task.get("owner_session_id") != session:
+        return False
+    command = get_command(get_tool_input(payload))
+    if any(value in command for value in ("$", "`", "\n", "\r")):
+        return False
+    import shlex
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        tokens = list(lexer)
+        if not tokens or any(token and set(token) <= set(";&|<>") for token in tokens):
+            return False
+        executable = tokens.pop(0)
+        if executable.casefold() not in {"py", "py.exe", "python", "python.exe", "python3", "python3.exe"}:
+            from hermes_verification_admission import APPROVED_EXECUTABLE
+            if Path(executable).resolve() != APPROVED_EXECUTABLE.resolve():
+                return False
+        while tokens and re.fullmatch(r"-3(?:\.\d+)?|-B", tokens[0]):
+            tokens.pop(0)
+        if tokens[:2] == ["-X", "utf8"]:
+            del tokens[:2]
+        if not tokens or Path(tokens.pop(0)).resolve() != Path(__file__).resolve():
+            return False
+        allowed = {"--runtime", "--action", "--session-id", "--task-id", "--set-json"}
+        values = {}
+        while tokens:
+            key = tokens.pop(0)
+            if key not in allowed or key in values or not tokens:
+                return False
+            values[key] = tokens.pop(0)
+        if (values.get("--runtime") != runtime or values.get("--action") != "update-task"
+                or values.get("--session-id") != session
+                or values.get("--task-id") != task.get("task_id")):
+            return False
+        metadata = json.loads(values.get("--set-json", ""))
+        if not isinstance(metadata, dict) or set(metadata) != {"cache_policy"}:
+            return False
+        policy = metadata["cache_policy"]
+        if not isinstance(policy, dict):
+            return False
+        if "verification_only" in policy:
+            from hermes_verification_admission import validate
+            if not validate(policy["verification_only"], task, session):
+                return False
+        if not isinstance(policy.get("query"), str) or not policy["query"].strip():
+            return False
+        if not isinstance(policy.get("input_fingerprint"), str) or not policy["input_fingerprint"].strip():
+            return False
+        inputs = policy.get("inputs")
+        if not isinstance(inputs, list) or not inputs:
+            return False
+        return all(isinstance(row, dict) and isinstance(row.get("path"), str)
+                   and Path(row["path"]).is_absolute()
+                   and isinstance(row.get("sha256"), str)
+                   and re.fullmatch(r"[0-9a-fA-F]{64}", row["sha256"])
+                   for row in inputs)
+    except (ValueError, TypeError, OSError):
+        return False
+
+
+def handle_pre_tool(runtime: str, payload: dict, *, registry: dict | None = None) -> int:
+    tool_name = get_tool_name(payload)
+    tool_input = get_tool_input(payload)
+    if not is_mutating_tool(runtime, tool_name, tool_input):
+        return 0
+    registry = load_registry() if registry is None else registry
+    task = active_task(registry, runtime, payload_session_id(runtime, payload))
+    if task is not None:
+        if task.get("status") == "blocked" or task.get("work_state") == "BLOCKED":
+            message = "The active goal is blocked; ordinary mutation is denied until a scoped recovery goal is locked."
+            return native_pretool_denial(runtime, message)
+        if task.get("mode") != "execute":
+            message = "The active goal is not in execute mode; mutating work is denied."
+            return native_pretool_denial(runtime, message)
+        if is_same_session_cache_policy_registration(runtime, payload, task):
+            return 0
+        cache = cache_gate_result(task)
+        if cache is not None and not cache.get("allow_generation", False):
+            # STALE never authorizes writes or promotion. Only the fixed offline
+            # runner with exact current-session/source binding can revalidate.
+            from hermes_verification_admission import admits_verification
+            if cache.get("outcome") == "STALE" and admits_verification(runtime, payload, task):
+                return 0
+            return native_pretool_denial(runtime, "Warp Cache " + cache["outcome"] + ": " + cache["reason"])
+        if runtime == "codex" and not str(task.get("writer_lock") or "").strip():
+            task["writer_lock"] = f"{runtime}:{payload_session_id(runtime, payload)}"
+            add_note(task, "Writer lock acquired at the first authorized mutating tool call.")
+            write_task_artifacts(task)
+            save_registry(registry)
+        return 0
+    message = "No active goal is locked for this runtime. Lock the goal first, then retry the mutating action."
+    if runtime == "copilot":
+        print(
+            json.dumps(
+                {"permissionDecision": "deny", "permissionDecisionReason": message},
+                ensure_ascii=False,
+            )
+        )
+        return 0
+    # copilot 외 런타임은 공용 goal registry만 공유하고, 차단 대신 warn-only를
+    # 기본값으로 유지한다. Codex PreToolUse에서 permissionDecision=allow는
+    # 공식 출력이 아니므로 additionalContext만 반환한다.
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "additionalContext": f"[WARN] {message}",
+                }
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
