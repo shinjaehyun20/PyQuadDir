@@ -134,34 +134,52 @@
     {
       "review_file": "write-path-guard-build.ps1.txt",
       "source_basename": "write-path-guard.ps1",
-      "source_sha256": "41c50b18ff3f816473d46db13f1b729c0b821d8dd9336578a754e3b3fa2d19ad",
+      "source_sha256": "7210f2a63a6acc02940ebb406455074fbb3940a62ca06a5025da7ff041c5991f",
       "selected_ranges": [
         [
           741,
-          756
+          764
         ]
       ],
-      "review_sha256": "4d55243e7ab5b27b53ddb2c731de5c73138aed823f5b547439f765c3dbd89381",
+      "review_sha256": "933d3fdf2a2e468041f3eab9c63eba871dd4bc8c36371831c6e4af9eeac71cec",
       "replacements": [
         {
-          "replacement": "review-fixture/interpreter/python.exe",
-          "original_sha256": "1d2e8eb9f23588f6d9e2d4714ec6b06167047df81bb3f7ed90b82b28fe1c920a"
+          "original_sha256": "1d2e8eb9f23588f6d9e2d4714ec6b06167047df81bb3f7ed90b82b28fe1c920a",
+          "replacement": "review-fixture/interpreter/python.exe"
         },
         {
-          "replacement": "review-fixture/hook-host/python.exe",
-          "original_sha256": "3c3f462c746a312d33fab0007a1a2064e344935a4db7bb94015f936c9b00a9b2"
+          "original_sha256": "3c3f462c746a312d33fab0007a1a2064e344935a4db7bb94015f936c9b00a9b2",
+          "replacement": "review-fixture/hook-host/python.exe"
         },
         {
-          "replacement": "review-fixture/pyquaddir-build-admission.py",
-          "original_sha256": "652b9e8780366db5ed19f4c9be23e6a7618fe77e19f6b47657f2694cd4797b0e"
+          "original_sha256": "652b9e8780366db5ed19f4c9be23e6a7618fe77e19f6b47657f2694cd4797b0e",
+          "replacement": "review-fixture/pyquaddir-build-admission.py"
         },
         {
-          "replacement": "fixture-session",
-          "original_sha256": "a133de45a1554af5f5c994b7101fa81a8a33a0c02560065cf621ea8ac9d78256"
+          "original_sha256": "a133de45a1554af5f5c994b7101fa81a8a33a0c02560065cf621ea8ac9d78256",
+          "replacement": "fixture-session"
         },
         {
-          "original": "D:/workspace/projects/active/pyquaddir",
+          "original_sha256": "e8c75cf0873121141caea5b990a7bb090f0b92339fac096570babb21f36513b8",
           "replacement": "review-fixture/repo"
+        }
+      ]
+    },
+    {
+      "review_file": "test_build_tool_input.py.txt",
+      "source_basename": "test_build_tool_input.py",
+      "source_sha256": "de7aec553acbd7c2f2f14f699e6d9223ae997445fe4f1ea45ee13a03d0de6fc4",
+      "selected_ranges": [
+        [
+          1,
+          78
+        ]
+      ],
+      "review_sha256": "c7a8fdfc1a938b8a3fde6f990fa488b4b631b9edc9832bfe71eddb7f39540a8c",
+      "replacements": [
+        {
+          "original_sha256": "a133de45a1554af5f5c994b7101fa81a8a33a0c02560065cf621ea8ac9d78256",
+          "replacement": "fixture-session"
         }
       ]
     }

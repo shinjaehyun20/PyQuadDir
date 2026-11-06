@@ -1,0 +1,78 @@
+"""Disposable safe helper/guard clones; no build or production pin refresh.
+Local mode executes full installed consumer; sanitized mode uses mapped branch
+and explicit minimal native-payload/deny harness, not a whole-guard approval.
+"""
+from pathlib import Path
+import copy, hashlib, json, os, subprocess, tempfile, unittest
+HERE=Path(__file__).resolve().parent
+HOOK=Path.home()/'AppData/Local/hermes/hooks/write-path-guard.ps1'
+HOST=Path.home()/'AppData/Local/Programs/Python/Python313/python.exe'
+REVIEW=HERE/'write-path-guard-build.ps1.txt'
+PREFIX='''$ErrorActionPreference='Stop'
+function Write-BlockJson { param([string]$Message) @{action='block';message=$Message}|ConvertTo-Json -Compress }
+function Add-EventLog { param([hashtable]$Record) }
+try {
+$payload=[Console]::In.ReadLine()|ConvertFrom-Json
+$toolName=$payload.tool_name; $toolInput=$payload.tool_input
+$sessionId=$payload.session_id; $command=$toolInput.command
+'''
+def digest(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+class ToolInputTests(unittest.TestCase):
+ @classmethod
+ def setUpClass(c):
+  c.tmp=tempfile.TemporaryDirectory(prefix='n2-',dir=HERE); c.root=Path(c.tmp.name)
+  c.marker=c.root/'called'; c.helper=c.root/'safe-helper.py'
+  c.helper.write_text('from pathlib import Path\nimport os,sys\nPath('+repr(str(c.marker))+').write_text("called")\nif any(os.environ.get(k) for k in ("PYTHONPATH","PYTHONHOME","PYTHONPLATLIBDIR")): sys.exit(1)\nprint("admit-canonical-build")\n')
+  c.pin=digest(c.helper); c.review=REVIEW.exists()
+  c.source=REVIEW if c.review else HOOK; c.before=digest(c.source)
+  text=c.source.read_text(encoding='utf-8-sig')
+  if c.review:
+   old='review-fixture/pyquaddir-build-admission.py'; host='review-fixture/hook-host/python.exe'
+   c.command='review-fixture/interpreter/python.exe build_exe.py --system-msvc-runtime --no-open'; c.cwd='review-fixture/repo'; c.session='fixture-session'
+  else:
+   old=(HOOK.parent/'pyquaddir-build-admission.py').as_posix(); host=HOST.as_posix()
+   c.command=(Path.home()/'AppData/Local/Programs/Python/Python311/python.exe').as_posix()+' build_exe.py --system-msvc-runtime --no-open'
+   c.cwd='D:/workspace/projects/active/pyquaddir'; c.session='fixture-session'
+  c.text=text.replace(old,c.helper.as_posix()).replace('3fb2c5816ff5d27123f1ad1e2660a80bb475ada1cf95bc260298d73d17101825',c.pin).replace(host,HOST.as_posix())
+  if c.review: c.text=PREFIX+c.text+"\nWrite-BlockJson 'fixture fallback deny'\n} catch { Write-BlockJson 'fixture parse/execution deny' }\n"
+  c.fixture=c.root/'guard.ps1'
+  c.base=dict(tool_name='terminal',session_id=c.session,cwd=c.cwd,tool_input=dict(command=c.command,workdir=c.cwd))
+ @classmethod
+ def tearDownClass(c):
+  assert digest(c.source)==c.before,'source drift'; c.tmp.cleanup()
+ def run_guard(self,p=None,text=None,env=None):
+  self.marker.unlink(missing_ok=True); self.fixture.write_text(text or self.text,encoding='utf-8-sig')
+  r=subprocess.run(['powershell.exe','-NoProfile','-File',str(self.fixture)],input=json.dumps(p or self.base)+'\n',capture_output=True,text=True,encoding='utf-8',timeout=45,env=env)
+  self.assertEqual(r.returncode,0,r.stderr); return r.stdout,self.marker.exists()
+ def test_exact_allowed(self): self.assertEqual(self.run_guard(),('',True))
+ def test_timeout_allowed(self):
+  p=copy.deepcopy(self.base); p['tool_input']['timeout']=600; self.assertEqual(self.run_guard(p),('',True))
+ def test_unknown_input_fields_denied(self):
+  cases={'env':{'PYTHONPATH':'injected'},'environment':{'PYTHONHOME':'injected'},'environment_variables':{},'unexpected':1,'Timeout':600,'background':False,'pty':False,'session_id':'other','notify':False,'heartbeat':0,'persist_on_release':False,'max_output_chars':1,'tool_call':{'arguments':{'env':{}}},'tool_input':{'env':{}}}
+  for k,v in cases.items():
+   with self.subTest(key=k):
+    p=copy.deepcopy(self.base); p['tool_input'][k]=v; out,called=self.run_guard(p); self.assertIn('block',out); self.assertFalse(called)
+ def test_alternate_casing_denied(self):
+  for k in ('command','workdir'):
+   with self.subTest(key=k):
+    p=copy.deepcopy(self.base); p['tool_input'][k.capitalize()]=p['tool_input'].pop(k)
+    out,called=self.run_guard(p); self.assertIn('block',out); self.assertFalse(called)
+ def test_invalid_timeout_denied(self):
+  for v in (True,'600',0,-1,None,{},[],1.5,601,2147483648):
+   with self.subTest(value=v):
+    p=copy.deepcopy(self.base); p['tool_input']['timeout']=v; out,called=self.run_guard(p); self.assertIn('block',out); self.assertFalse(called)
+ def test_nested_workdir_denied(self):
+  p=copy.deepcopy(self.base); p['tool_input']['workdir']=[self.cwd]; out,called=self.run_guard(p); self.assertIn('block',out); self.assertFalse(called)
+ def test_command_env_or_extra_argv_denied(self):
+  for cmd in ('PYTHONPATH=injected '+self.command,self.command+' --env PYTHONPATH=injected',self.command+'; whoami'):
+   with self.subTest(command=cmd):
+    p=copy.deepcopy(self.base); p['tool_input']['command']=cmd; out,called=self.run_guard(p); self.assertIn('block',out); self.assertFalse(called)
+ def test_wrong_session_denied(self):
+  p=copy.deepcopy(self.base); p['session_id']='wrong'; out,called=self.run_guard(p); self.assertIn('block',out); self.assertFalse(called)
+ def test_helper_hash_drift_denied(self):
+  out,called=self.run_guard(text=self.text.replace(self.pin,'0'*64)); self.assertIn('block',out); self.assertFalse(called)
+ def test_wrong_host_denied(self):
+  out,called=self.run_guard(text=self.text.replace(HOST.as_posix(),(self.root/'missing-host.exe').as_posix())); self.assertIn('block',out); self.assertFalse(called)
+ def test_inherited_env_fixture_helper_denies(self):
+  out,called=self.run_guard(env=dict(os.environ,PYTHONPATH=str(self.root))); self.assertIn('block',out); self.assertTrue(called)
+if __name__=='__main__': unittest.main(verbosity=2)

@@ -3,6 +3,14 @@
     # dependency tree, backup, closed app, aliases, expiry and interpreter environment.
     $qdirBuild = 'review-fixture/interpreter/python.exe build_exe.py --system-msvc-runtime --no-open'
     if ($toolName -ceq 'terminal' -and $command -ceq $qdirBuild -and $sessionId -ceq 'fixture-session' -and $toolInput.workdir -ceq 'review-fixture/repo' -and -not $toolInput.background -and -not $toolInput.pty) {
+        # Native terminal args pass through to the executor. No per-call env,
+        # transport/session overrides or nested tool calls may bypass the helper's
+        # inherited-environment check. Match names case-sensitively, not PS aliases.
+        $qdirNames = @($toolInput.PSObject.Properties.Name)
+        if ($toolInput -isnot [pscustomobject] -or 'command' -cnotin $qdirNames -or 'workdir' -cnotin $qdirNames -or @($qdirNames | Where-Object { $_ -cnotin @('command','workdir','timeout') }).Count -or $toolInput.command -isnot [string] -or $toolInput.workdir -isnot [string] -or ('timeout' -cin $qdirNames -and (($toolInput.timeout -isnot [int] -and $toolInput.timeout -isnot [long]) -or $toolInput.timeout -lt 1 -or $toolInput.timeout -gt 600))) {
+            Write-BlockJson -Message 'Canonical PyQuadDir build admission denied: only literal command/workdir and optional positive integer timeout are accepted.'
+            return
+        }
         $qdirVerifier='review-fixture/pyquaddir-build-admission.py'
         if ((Get-FileHash -LiteralPath $qdirVerifier -Algorithm SHA256).Hash.ToLowerInvariant() -ceq '3fb2c5816ff5d27123f1ad1e2660a80bb475ada1cf95bc260298d73d17101825') {
             $qdirReceipt = & 'review-fixture/hook-host/python.exe' -B $qdirVerifier --command $command --cwd $toolInput.workdir --session $sessionId
