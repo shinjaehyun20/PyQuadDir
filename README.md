@@ -35,7 +35,7 @@
 **Windows x64용입니다. Python 설치는 필요 없지만 Microsoft Visual C++ v14 x64 Runtime 14.44.35211.0 이상이 필요합니다.** [최신 릴리스와 변경 사항](https://github.com/shinjaehyun20/PyQuadDir/releases/latest) · [전체 변경 기록](CHANGELOG.md)
 
 1. 필요한 경우 [Microsoft 공식 Visual C++ v14 x64 런타임](https://aka.ms/vc14/vc_redist.x64.exe)을 직접 설치한 뒤 위 링크에서 `PyQuadDir.exe`를 내려받습니다. GitHub의 **Source code (zip)**은 실행 파일이 아닌 개발용 소스입니다.
-2. 쓰기 가능한 원하는 폴더에 저장하고 실행합니다. 앱 설치 프로그램은 없습니다. Microsoft 런타임 DLL/설치 프로그램은 포함하지 않으며 자동 설치하지 않습니다. 전체 고지·대응 소스는 릴리스의 배포 ZIP과 함께 받으세요.
+2. 쓰기 가능한 원하는 폴더에 저장하고 실행합니다. 앱 설치 프로그램은 없습니다. Microsoft 런타임 DLL/설치 프로그램은 포함하지 않으며 자동 설치하지 않습니다. 라이선스 고지는 릴리스의 `PyQuadDir-v3.2.0-Windows-x64.zip`, 대응 소스와 빌드 안내는 `PyQuadDir-v3.2.0-sources.zip`에 있습니다.
 3. 네 패널에서 각각 폴더를 열고 `Ctrl+T`로 탭을 추가합니다. `Ctrl+1`은 4분할, `Ctrl+마우스 휠`은 보기 확대·축소입니다.
 
 - **주요 기능:** 4분할·다중 탭, 패널 간 복사·이동, 이미지/문서 미리 보기, 다크·라이트 테마, 세션 복원.
@@ -51,7 +51,7 @@
 
 Qt 엔진의 **도구** 메뉴에 일괄 이름 바꾸기·실행 취소, 패널 비교·선택 복사, 폴더 용량, 해시·중복 찾기, 목록 내보내기, 하위 파일 모아보기, 탭 복제·잠금, 빠른 이동을 추가했습니다. 자세한 변경은 [CHANGELOG](CHANGELOG.md)를 참고하세요.
 
-**이 문서는 v3.2.0 소스 기준입니다.** 위 다운로드는 GitHub에 게시된 최신 바이너리로 연결됩니다. 소스 커밋·푸시가 새 실행 파일의 릴리스 발행을 뜻하지는 않습니다.
+**[v3.2.0 릴리스](https://github.com/shinjaehyun20/PyQuadDir/releases/tag/v3.2.0):** 실행 파일·라이선스 고지 ZIP·대응 소스 ZIP·`SHA256SUMS.txt`를 함께 제공합니다. [릴리스 노트](docs/releases/v3.2.0.md)에서 변경 사항과 파일 구성을 확인하세요. 소스 커밋·푸시와 릴리스 발행은 별도로 확인합니다.
 
 - Qt 엔진에서 전체 도구를 제공합니다. Tkinter의 도구 메뉴는 폴더 용량·해시·CSV 내보내기만 제공합니다.
 - 새 부가기능의 이름 변경·선택 복사·내보내기는 경로 보호를 구현한 Windows에서 지원합니다. macOS/Linux에서는 이 쓰기 작업을 거부하며 읽기·비교·해시 기능은 사용할 수 있습니다.
@@ -231,6 +231,10 @@ python pyquaddir.py --profile-dir .\test-profile
 python -m unittest discover -s tests -v
 python pyquaddir.py --self-test-gui --profile-dir .\test-profile
 ```
+
+### 릴리스 관리
+
+이 저장소에서 릴리스를 게시한 뒤에는 커밋·푸시할 때마다 소스 버전과 최신 릴리스·태그·다운로드 파일의 일치 여부도 확인합니다. 새 버전의 배포 대상 변경이면 검증한 실행 파일, 릴리스 노트, 해시와 대응 소스를 함께 갱신합니다. 문서만 수정한 경우에는 실행 파일을 다시 올릴 필요가 없습니다. 자세한 절차는 [릴리스 관리 안내](docs/RELEASING.md)를 따릅니다.
 
 <a id="shortcuts"></a>
 
