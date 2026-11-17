@@ -26,7 +26,7 @@ def probe(module_name, folder):
         win = next(w for w in app.topLevelWidgets() if hasattr(w, 'panes'))
         try:
             assert win.windowTitle() == 'PyQuadDir Desktop Explorer'
-            assert mod.APP_VERSION == '3.1.1'
+            assert mod.APP_VERSION == '3.2.0'
             import build_exe
             assert mod.APP_VERSION == '.'.join(map(str, build_exe.APP_VERSION[:3]))
             assert win.btn_version.text() == '버전정보'
@@ -36,7 +36,7 @@ def probe(module_name, folder):
                 assert dialog.windowTitle() == '버전정보'
                 text = '\n'.join(label.text() for label in dialog.findChildren(QLabel))
                 assert 'PyQuadDir Desktop Explorer' in text
-                assert '현재 버전: 3.1.1' in text and 'MIT License' in text
+                assert '현재 버전: 3.2.0' in text and 'MIT License' in text
                 assert str(folder) not in text and 'C:/' not in text and 'D:/' not in text
                 assert not opener.called, 'opening About must not check updates'
                 button = next(b for b in dialog.findChildren(QPushButton) if b.text() == '업데이트 확인')

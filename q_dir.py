@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-Q-Dir Desktop Explorer v3.1 (Quad-View File Manager for Windows)
+Q-Dir Desktop Explorer v3.2.0 (Quad-View File Manager for Windows)
 ================================================================
 [v3.1 보안·무결성·트랜잭션 아카이브 엔진 & 프로필 격리/호환 패치 (기준본 v3.0 B3810E3827B1)]
 1. [사전 전수 검사 (Pre-Write Full Inspection)] 첫 바이트 쓰기 전 ZIP·TAR 모든 엔트리 및 대상 경로 검증:
@@ -87,6 +87,7 @@ import argparse
 import ctypes
 import datetime
 import json
+import ntpath
 import os
 import platform
 import re
@@ -110,7 +111,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 # ---------------------------------------------------------------------------
 CONFIG_PATH = Path.home() / ".qdir_py_config.json"
 APP_NAME = "PyQuadDir Desktop Explorer"
-APP_VERSION = "3.1.1"
+APP_VERSION = "3.2.0"
 RELEASES_URL = "https://github.com/shinjaehyun20/PyQuadDir/releases/latest"
 
 IMAGE_EXTENSIONS = {
@@ -1338,61 +1339,235 @@ def elide_middle_smart(text: str, max_visual_cols: int = 20) -> str:
     return f"{''.join(head_chars)}…{tail}"
 
 
+_INVISIBLE_PATH_CHARS_RE = re.compile(
+    r"[\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]"
+)
+_HEX_PERCENT_RE = re.compile(r"%[0-9A-Fa-f]{2}")
+_WIN_DRIVE_PREFIX_RE = re.compile(r"^[A-Za-z]:(?:[\\/]|$)")
+
+
+def _clean_raw_path_text(raw_input: str) -> str:
+    """
+    주소창/클립보드 입력에서 유니코드 방향·제로폭 제어문자(\u202a~\u202e, \u200b~\u200f, \ufeff),
+    개행/탭 공백, Windows 탐색기 '경로로 복사' 따옴표를 안전하게 제거합니다.
+    """
+    if raw_input is None:
+        return ""
+    s = _INVISIBLE_PATH_CHARS_RE.sub("", str(raw_input)).replace("\x00", "")
+    if "\r" in s or "\n" in s:
+        non_empty_lines = [ln.strip() for ln in s.splitlines() if ln.strip()]
+        s = non_empty_lines[0] if non_empty_lines else ""
+
+    double_quotes = '"\u201c\u201d'
+    single_quotes = "'\u2018\u2019"
+    while s:
+        prev = s
+        s = _INVISIBLE_PATH_CHARS_RE.sub("", s).strip()
+        if len(s) >= 2 and (
+            (s[0] in double_quotes and s[-1] in double_quotes)
+            or (s[0] in single_quotes and s[-1] in single_quotes)
+        ):
+            s = s[1:-1]
+            continue
+        # 큰따옴표(")는 Windows 파일명에 사용할 수 없으므로 비대칭 잔여 따옴표도 제거
+        s = s.strip(double_quotes)
+        if s == prev:
+            break
+    return _INVISIBLE_PATH_CHARS_RE.sub("", s).strip()
+
+
 def safe_norm_path(path_str: str) -> str:
     """
     Google Drive(G:) 등 가상 드라이브에서 `Path.resolve()` 호출 시 발생하는
     Reparse Point 우회 및 `\\\\?\\` 확장 경로 왜곡을 방지하고 안전하게 표준 경로를 반환합니다.
     """
-    if not path_str:
+    s = _clean_raw_path_text(path_str)
+    if not s:
         return ""
-    s = str(path_str).strip()
-    if s.startswith("\\\\?\\UNC\\"):
+    if s[:8].upper() in ("\\\\?\\UNC\\", "//?/UNC/"):
         s = "\\\\" + s[8:]
-    elif s.startswith("\\\\?\\"):
+    elif s.startswith(("\\\\?\\", "//?/")):
         s = s[4:]
+    if platform.system() == "Windows":
+        s = s.replace("/", "\\")
+        if len(s) == 2 and s[0].isalpha() and s[1] == ":":
+            s += "\\"
+        return ntpath.normpath(ntpath.abspath(s))
     return os.path.normpath(os.path.abspath(s))
 
 
 def normalize_user_input_path(raw_input: str) -> str:
     """
-    사용자가 주소창에 입력한 문자열을 실제 로컬/가상 드라이브 경로로 변환합니다.
-    - `file:///C:/workspace/docs/%EB%AC%B8%EC%84%9C/index.html` 지원
-    - `C:/workspace/%EB%AC%B8%EC%84%9C/report.html` 지원
+    사용자가 주소창에 입력하거나 붙여넣은 문자열을 실제 로컬/가상 드라이브 경로로 정규화합니다.
+    - Windows 탐색기 '경로로 복사' 따옴표, 후행 슬래시/백슬래시, 앞뒤 공백·개행 제거
+    - Windows 속성창 복사 시 포함되는 유니코드 방향 제어문자(\u202a~\u202e, \u200b, \ufeff 등) 제거
+    - `file:///` 및 `%20` 등 URL 인코딩 경로 해독 (실제 존재하는 리터럴 `%` 파일명 보존)
     """
-    s = raw_input.strip().strip('"').strip("'")
+    s = _clean_raw_path_text(raw_input)
     if not s:
         return ""
 
-    if s.lower().startswith("file://"):
-        parsed = urllib.parse.urlparse(s)
-        path_part = urllib.parse.unquote(parsed.path or "")
-        netloc_part = urllib.parse.unquote(parsed.netloc or "")
+    was_file_url = False
+    if s.lower().startswith("file:"):
+        was_file_url = True
+        url_candidate = s
+        if url_candidate[5:].startswith("\\"):
+            url_candidate = "file://" + url_candidate[5:].lstrip("\\/").replace("\\", "/")
+        parsed = urllib.parse.urlparse(url_candidate)
+        path_part = _INVISIBLE_PATH_CHARS_RE.sub("", urllib.parse.unquote(parsed.path or ""))
+        netloc_part = _INVISIBLE_PATH_CHARS_RE.sub("", urllib.parse.unquote(parsed.netloc or ""))
         if netloc_part and netloc_part.lower() != "localhost":
-            if netloc_part.endswith(":"):
-                s = f"{netloc_part}{path_part}"
+            if len(netloc_part) == 2 and netloc_part[0].isalpha() and netloc_part[1] in (":", "|"):
+                s = f"{netloc_part[0]}:{path_part}"
             else:
                 s = f"//{netloc_part}{path_part}"
         else:
-            if len(path_part) >= 3 and path_part[0] == "/" and path_part[2] == ":":
-                s = path_part[1:]
+            if re.match(r"^/+[A-Za-z][:|](?:[\\/]|$)", path_part):
+                trimmed = path_part.lstrip("/")
+                s = f"{trimmed[0]}:{trimmed[2:]}"
             else:
                 s = path_part
-    else:
-        if "%" in s:
-            s = os.path.expandvars(s)
+
+    if s[:8].upper() in ("\\\\?\\UNC\\", "//?/UNC/"):
+        s = "\\\\" + s[8:]
+    elif s.startswith(("\\\\?\\", "//?/")):
+        s = s[4:]
+
+    s = os.path.expandvars(os.path.expanduser(s))
+
+    if not was_file_url and "%" in s and _HEX_PERCENT_RE.search(s):
+        literal_exists = False
+        try:
+            probe = s.replace("/", "\\") if platform.system() == "Windows" else s
+            literal_exists = os.path.lexists(probe)
+        except OSError:
+            literal_exists = False
+        if not literal_exists:
             try:
                 unquoted = urllib.parse.unquote(s)
                 if unquoted != s:
-                    s = unquoted
+                    s = _INVISIBLE_PATH_CHARS_RE.sub("", unquoted)
             except Exception:
                 pass
 
-    s = os.path.expandvars(os.path.expanduser(s))
-    if platform.system() == "Windows":
+    s = _clean_raw_path_text(s)
+    if not s:
+        return ""
+
+    is_win_style = (
+        platform.system() == "Windows"
+        or bool(_WIN_DRIVE_PREFIX_RE.match(s))
+        or s.startswith("\\\\")
+        or (was_file_url and s.startswith("//") and len(s) > 2 and s[2] != "/")
+    )
+    if is_win_style:
         s = s.replace("/", "\\")
-        if len(s) == 2 and s[1] == ":":
-            s += "\\"
+        if len(s) == 2 and s[0].isalpha() and s[1] == ":":
+            return f"{s}\\"
+        return ntpath.normpath(s)
     return os.path.normpath(s)
+
+
+def _looks_like_file_leaf(leaf_name: str) -> bool:
+    """마지막 경로 세그먼트가 파일명 형태(유효 확장자 또는 dotfile)인지 판별합니다."""
+    if not leaf_name or leaf_name in (".", ".."):
+        return False
+    if leaf_name.startswith(".") and len(leaf_name) > 1 and "." not in leaf_name[1:]:
+        return True
+    suffix = Path(leaf_name).suffix
+    if not suffix or len(suffix) < 2 or len(suffix) > 16:
+        return False
+    ext_body = suffix[1:]
+    return any(ch.isalpha() for ch in ext_body) and all(
+        ch.isalnum() or ch in ("_", "-") for ch in ext_body
+    )
+
+
+def resolve_address_bar_target(
+    raw_input: str,
+    allow_missing_file_parent: bool = True,
+) -> Dict[str, Any]:
+    """
+    주소창 입력 경로를 분석하여 이동 대상 디렉터리와 선택할 파일 정보를 반환합니다.
+    반환 키:
+      - kind: 'empty' | 'dir' | 'existing_file' | 'missing_file_in_existing_dir' | 'not_found'
+      - normalized_input: 정규화된 입력 경로 문자열
+      - target_dir: 이동할 최종(리프) 디렉터리 경로
+      - select_file: 이동 후 목록에서 자동 선택·포커싱할 파일 경로 (파일 경로 입력 시)
+      - missing_leaf_name: 존재하지 않는 리프 파일명 (부모 디렉터리가 실제 존재할 때)
+    """
+    cleaned = _clean_raw_path_text(raw_input)
+    if not cleaned:
+        return {
+            "kind": "empty",
+            "normalized_input": "",
+            "target_dir": "",
+            "select_file": "",
+            "missing_leaf_name": "",
+        }
+
+    had_trailing_sep = cleaned.endswith(("/", "\\")) or cleaned.lower().endswith(("%2f", "%5c"))
+    decoded_str = normalize_user_input_path(raw_input)
+    if not decoded_str:
+        return {
+            "kind": "empty",
+            "normalized_input": "",
+            "target_dir": "",
+            "select_file": "",
+            "missing_leaf_name": "",
+        }
+
+    target = Path(decoded_str)
+    try:
+        exists = target.exists()
+        is_dir = exists and target.is_dir()
+        is_file = exists and target.is_file()
+    except OSError:
+        exists = is_dir = is_file = False
+
+    if is_dir:
+        return {
+            "kind": "dir",
+            "normalized_input": decoded_str,
+            "target_dir": safe_norm_path(str(target)),
+            "select_file": "",
+            "missing_leaf_name": "",
+        }
+
+    if is_file and not had_trailing_sep:
+        parent_dir = safe_norm_path(str(target.parent))
+        file_norm = safe_norm_path(str(target))
+        return {
+            "kind": "existing_file",
+            "normalized_input": decoded_str,
+            "target_dir": parent_dir,
+            "select_file": file_norm,
+            "missing_leaf_name": "",
+        }
+
+    if not exists and allow_missing_file_parent and not had_trailing_sep:
+        parent = target.parent
+        if parent != target:
+            try:
+                parent_ok = parent.exists() and parent.is_dir()
+            except OSError:
+                parent_ok = False
+            if parent_ok and _looks_like_file_leaf(target.name):
+                return {
+                    "kind": "missing_file_in_existing_dir",
+                    "normalized_input": decoded_str,
+                    "target_dir": safe_norm_path(str(parent)),
+                    "select_file": "",
+                    "missing_leaf_name": target.name,
+                }
+
+    return {
+        "kind": "not_found",
+        "normalized_input": decoded_str,
+        "target_dir": "",
+        "select_file": "",
+        "missing_leaf_name": "",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -2399,6 +2574,52 @@ def run_pyqt6_app() -> None:
             )
             painter.end()
 
+    class AddressLineEdit(QLineEdit):
+        """
+        주소창 전용 QLineEdit 서브클래스:
+        - Return/Enter 입력 시 QLineEdit 기본 구현의 `event.ignore()`로 인해 부모 QDirMainWindow로
+          키 이벤트가 버블링되어 `activate_selected_or_current()`(`..` 상위 폴더 이동)가 연쇄 호출되는
+          버그를 `event.accept()`로 원천 차단합니다.
+        - 포커스 진입 시 즉시 해당 패널을 활성 패널로 동기화하며, Escape 입력 시 현재 경로를 복원합니다.
+        """
+        focused = pyqtSignal()
+        escapePressed = pyqtSignal()
+
+        def focusInEvent(self, event) -> None:
+            super().focusInEvent(event)
+            self.focused.emit()
+
+        def keyPressEvent(self, event) -> None:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                self.returnPressed.emit()
+                event.accept()
+                return
+            if event.key() == Qt.Key.Key_Escape:
+                self.escapePressed.emit()
+                event.accept()
+                return
+            super().keyPressEvent(event)
+
+    class FilterLineEdit(QLineEdit):
+        """필터 입력창 전용 QLineEdit: Enter 버블링 차단 및 포커스 시 패널 활성화."""
+        focused = pyqtSignal()
+        escapePressed = pyqtSignal()
+
+        def focusInEvent(self, event) -> None:
+            super().focusInEvent(event)
+            self.focused.emit()
+
+        def keyPressEvent(self, event) -> None:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                self.returnPressed.emit()
+                event.accept()
+                return
+            if event.key() == Qt.Key.Key_Escape:
+                self.escapePressed.emit()
+                event.accept()
+                return
+            super().keyPressEvent(event)
+
     # -----------------------------------------------------------------------
     # 고시인성 벡터 UI 아이콘 생성기 (20x20px 선명한 그래픽)
     # -----------------------------------------------------------------------
@@ -2711,12 +2932,22 @@ def run_pyqt6_app() -> None:
         if not dest_dir.exists() or not dest_dir.is_dir():
             return 0, [f"대상 폴더가 존재하지 않습니다: {dest_dir_str}"]
 
+        ordered_sources: List[str] = []
+        seen_sources: set[str] = set()
+        for raw_src in list(src_paths):
+            if not raw_src:
+                continue
+            norm_s = safe_norm_path(str(raw_src))
+            norm_key = os.path.normcase(norm_s)
+            if norm_key not in seen_sources:
+                seen_sources.add(norm_key)
+                ordered_sources.append(norm_s)
+
         success_count = 0
         errors: List[str] = []
         apply_all_choice: Optional[str] = None
 
-        for src_str in src_paths:
-            src_norm = safe_norm_path(src_str)
+        for src_norm in ordered_sources:
             src = Path(src_norm)
             if not src.exists():
                 continue
@@ -2836,6 +3067,8 @@ def run_pyqt6_app() -> None:
             self._press_pos: Optional[QPoint] = None
             self._drag_mode: str = "none"  # "none" | "marquee" | "file_drag"
             self._initial_selected_rows: set[int] = set()
+            self._drag_paths: List[str] = []
+            self._pressed_row: int = -1
 
         def apply_responsive_columns(self, viewport_tier: str) -> None:
             """뷰포트 폭(360px 세로 / 780px 가로 / 데스크톱)에 맞춰 부가 컬럼을 자동 숨김/복원합니다."""
@@ -2875,6 +3108,7 @@ def run_pyqt6_app() -> None:
 
         def focusInEvent(self, event) -> None:
             super().focusInEvent(event)
+            self.dir_tab._ensure_non_parent_current_index()
             self.paneFocused.emit()
 
         def keyPressEvent(self, event) -> None:
@@ -2902,12 +3136,39 @@ def run_pyqt6_app() -> None:
                 return
             super().wheelEvent(event)
 
+        def _is_row_selected_valid(self, row: int) -> bool:
+            if row < 0 or row >= self.rowCount() or self.isRowHidden(row):
+                return False
+            first = self.item(row, 0)
+            if first is None or bool(first.data(Qt.ItemDataRole.UserRole + 1)):
+                return False
+            if first.isSelected():
+                return True
+            sel_model = self.selectionModel()
+            if sel_model is not None:
+                idx0 = self.model().index(row, 0)
+                if idx0.isValid() and hasattr(sel_model, 'isSelected') and sel_model.isSelected(idx0):
+                    return True
+            return False
+
+        def _set_current_index_no_update(self, idx) -> None:
+            if not idx.isValid():
+                return
+            sel_model = self.selectionModel()
+            if sel_model is not None:
+                sel_model.setCurrentIndex(idx, QItemSelectionModel.SelectionFlag.NoUpdate)
+
         def _selected_valid_rows(self) -> set[int]:
             rows: set[int] = set()
+            sel_model = self.selectionModel()
+            if sel_model is not None and hasattr(sel_model, 'selectedRows'):
+                for m_idx in sel_model.selectedRows(0):
+                    r = m_idx.row()
+                    if self._is_row_selected_valid(r):
+                        rows.add(r)
             for item in self.selectedItems():
                 r = item.row()
-                first = self.item(r, 0)
-                if first is not None and not bool(first.data(Qt.ItemDataRole.UserRole + 1)):
+                if self._is_row_selected_valid(r):
                     rows.add(r)
             return rows
 
@@ -2925,28 +3186,74 @@ def run_pyqt6_app() -> None:
                             self.middleClickedFolder.emit(full_path)
                             return
 
+            if event.button() == Qt.MouseButton.RightButton:
+                self._press_pos = None
+                self._drag_mode = "none"
+                self._drag_paths = []
+                self._pressed_row = -1
+                idx = self.indexAt(pos)
+                modifiers = event.modifiers()
+                has_mod = bool(
+                    modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
+                )
+                if idx.isValid():
+                    first_item = self.item(idx.row(), 0)
+                    is_parent = (
+                        bool(first_item.data(Qt.ItemDataRole.UserRole + 1))
+                        if first_item is not None
+                        else True
+                    )
+                    if is_parent:
+                        if not has_mod:
+                            self.clearSelection()
+                        self._set_current_index_no_update(idx)
+                    elif self._is_row_selected_valid(idx.row()):
+                        self._set_current_index_no_update(idx)
+                    else:
+                        if not has_mod:
+                            self.clearSelection()
+                            self.selectRow(idx.row())
+                        else:
+                            sel_model = self.selectionModel()
+                            if sel_model is not None:
+                                max_col = max(0, self.columnCount() - 1)
+                                sel = QItemSelection(
+                                    self.model().index(idx.row(), 0),
+                                    self.model().index(idx.row(), max_col),
+                                )
+                                sel_model.select(
+                                    sel,
+                                    QItemSelectionModel.SelectionFlag.Select
+                                    | QItemSelectionModel.SelectionFlag.Rows,
+                                )
+                        self._set_current_index_no_update(idx)
+                else:
+                    if not has_mod:
+                        self.clearSelection()
+                event.accept()
+                return
+
             if event.button() == Qt.MouseButton.LeftButton:
                 self._press_pos = pos
                 idx = self.indexAt(pos)
                 modifiers = event.modifiers()
 
-                was_selected = False
-                if idx.isValid():
-                    first_item = self.item(idx.row(), 0)
-                    if first_item is not None:
-                        is_parent = bool(first_item.data(Qt.ItemDataRole.UserRole + 1))
-                        was_selected = first_item.isSelected() and not is_parent
+                was_selected = idx.isValid() and self._is_row_selected_valid(idx.row())
 
                 if (
                     was_selected
                     and not (modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier))
                 ):
                     self._drag_mode = "file_drag"
-                    self.setCurrentIndex(idx)
+                    self._pressed_row = idx.row()
+                    self._drag_paths = self.selected_file_paths()
+                    self._set_current_index_no_update(idx)
                     event.accept()
                     return
 
                 self._drag_mode = "marquee"
+                self._pressed_row = -1
+                self._drag_paths = []
                 if modifiers & Qt.KeyboardModifier.ControlModifier:
                     self._initial_selected_rows = self._selected_valid_rows()
                 else:
@@ -2955,6 +3262,21 @@ def run_pyqt6_app() -> None:
                 return
 
             super().mousePressEvent(event)
+
+        def mouseDoubleClickEvent(self, event) -> None:
+            if event.button() == Qt.MouseButton.LeftButton:
+                self.paneFocused.emit()
+                pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+                idx = self.indexAt(pos)
+                self._press_pos = None
+                self._drag_mode = "none"
+                self._pressed_row = -1
+                self._drag_paths = []
+                if idx.isValid():
+                    self.doubleClicked.emit(idx)
+                    event.accept()
+                    return
+            super().mouseDoubleClickEvent(event)
 
         def mouseMoveEvent(self, event) -> None:
             if not (event.buttons() & Qt.MouseButton.LeftButton) or self._press_pos is None:
@@ -2968,7 +3290,9 @@ def run_pyqt6_app() -> None:
                 if dist >= QApplication.startDragDistance():
                     self._drag_mode = "none"
                     self._press_pos = None
+                    self._pressed_row = -1
                     self.startDrag(Qt.DropAction.CopyAction | Qt.DropAction.MoveAction)
+                event.accept()
                 return
 
             if self._drag_mode == "marquee":
@@ -2990,12 +3314,30 @@ def run_pyqt6_app() -> None:
                     self._rubber_band.hide()
                 elif self._drag_mode == "file_drag" and self._press_pos is not None:
                     idx = self.indexAt(pos)
-                    if idx.isValid():
+                    target_row = idx.row() if idx.isValid() else self._pressed_row
+                    if 0 <= target_row < self.rowCount():
+                        first_item = self.item(target_row, 0)
+                        if first_item is None or bool(first_item.data(Qt.ItemDataRole.UserRole + 1)):
+                            target_row = self._pressed_row
+                    if 0 <= target_row < self.rowCount():
                         self.clearSelection()
-                        self.selectRow(idx.row())
-                        self.setCurrentIndex(idx)
+                        self.selectRow(target_row)
+                        focus_idx = (
+                            idx
+                            if (idx.isValid() and idx.row() == target_row)
+                            else self.model().index(target_row, 0)
+                        )
+                        self._set_current_index_no_update(focus_idx)
+                    self._press_pos = None
+                    self._drag_mode = "none"
+                    self._pressed_row = -1
+                    self._drag_paths = []
+                    event.accept()
+                    return
                 self._press_pos = None
                 self._drag_mode = "none"
+                self._pressed_row = -1
+                self._drag_paths = []
             super().mouseReleaseEvent(event)
 
         def _update_marquee_selection(self, rect: QRect, modifiers: Qt.KeyboardModifier) -> None:
@@ -3037,22 +3379,25 @@ def run_pyqt6_app() -> None:
 
         def selected_file_paths(self) -> List[str]:
             paths: List[str] = []
-            seen_rows = set()
-            for item in self.selectedItems():
-                row = item.row()
-                if row in seen_rows:
-                    continue
-                seen_rows.add(row)
+            seen_paths: set[str] = set()
+            for row in sorted(self._selected_valid_rows()):
                 name_item = self.item(row, 0)
                 if name_item is not None:
-                    is_parent = name_item.data(Qt.ItemDataRole.UserRole + 1)
+                    is_parent = bool(name_item.data(Qt.ItemDataRole.UserRole + 1))
                     path = name_item.data(Qt.ItemDataRole.UserRole)
                     if path and not is_parent:
-                        paths.append(str(path))
+                        p_str = str(path)
+                        norm_key = os.path.normcase(safe_norm_path(p_str))
+                        if norm_key not in seen_paths:
+                            seen_paths.add(norm_key)
+                            paths.append(p_str)
             return paths
 
         def startDrag(self, supportedActions) -> None:
-            paths = self.selected_file_paths()
+            try:
+                paths = list(self._drag_paths) if self._drag_paths else self.selected_file_paths()
+            finally:
+                self._drag_paths = []
             if not paths:
                 return
             mime = QMimeData()
@@ -3079,23 +3424,30 @@ def run_pyqt6_app() -> None:
             if not event.mimeData().hasUrls():
                 return
             src_paths: List[str] = []
+            seen_src: set[str] = set()
             for url in event.mimeData().urls():
                 if url.isLocalFile():
                     local_p = url.toLocalFile()
-                    if os.path.exists(local_p):
-                        src_paths.append(safe_norm_path(local_p))
+                    if local_p and os.path.exists(local_p):
+                        norm_p = safe_norm_path(local_p)
+                        norm_key = os.path.normcase(norm_p)
+                        if norm_key not in seen_src:
+                            seen_src.add(norm_key)
+                            src_paths.append(norm_p)
             if not src_paths:
                 return
 
             target_dir = self.dir_tab.current_path
-            pos = event.position().toPoint()
+            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
             idx = self.indexAt(pos)
             if idx.isValid():
                 row_item = self.item(idx.row(), 0)
                 if row_item is not None:
                     candidate_path = row_item.data(Qt.ItemDataRole.UserRole)
                     if candidate_path and os.path.isdir(candidate_path):
-                        target_dir = str(candidate_path)
+                        cand_norm = safe_norm_path(str(candidate_path))
+                        if os.path.normcase(cand_norm) not in seen_src:
+                            target_dir = cand_norm
 
             modifiers = event.modifiers()
             event.acceptProposedAction()
@@ -3131,6 +3483,8 @@ def run_pyqt6_app() -> None:
             self._press_pos: Optional[QPoint] = None
             self._drag_mode: str = "none"
             self._initial_selected_rows: set[int] = set()
+            self._drag_paths: List[str] = []
+            self._pressed_item: Optional[QListWidgetItem] = None
 
         def selectAll(self) -> None:
             self.clearSelection()
@@ -3144,6 +3498,7 @@ def run_pyqt6_app() -> None:
 
         def focusInEvent(self, event) -> None:
             super().focusInEvent(event)
+            self.dir_tab._ensure_non_parent_current_index()
             self.paneFocused.emit()
 
         def keyPressEvent(self, event) -> None:
@@ -3171,11 +3526,21 @@ def run_pyqt6_app() -> None:
                 return
             super().wheelEvent(event)
 
+        def _set_current_item_no_update(self, item: Optional[QListWidgetItem]) -> None:
+            if item is None:
+                return
+            self.setCurrentItem(item, QItemSelectionModel.SelectionFlag.NoUpdate)
+
         def _selected_valid_indices(self) -> set[int]:
             indices: set[int] = set()
             for i in range(self.count()):
                 it = self.item(i)
-                if it is not None and it.isSelected() and not bool(it.data(Qt.ItemDataRole.UserRole + 1)):
+                if (
+                    it is not None
+                    and not it.isHidden()
+                    and it.isSelected()
+                    and not bool(it.data(Qt.ItemDataRole.UserRole + 1))
+                ):
                     indices.add(i)
             return indices
 
@@ -3191,13 +3556,42 @@ def run_pyqt6_app() -> None:
                         self.middleClickedFolder.emit(full_path)
                         return
 
+            if event.button() == Qt.MouseButton.RightButton:
+                self._press_pos = None
+                self._drag_mode = "none"
+                self._drag_paths = []
+                self._pressed_item = None
+                item = self.itemAt(pos)
+                modifiers = event.modifiers()
+                has_mod = bool(
+                    modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
+                )
+                if item is not None:
+                    is_parent = bool(item.data(Qt.ItemDataRole.UserRole + 1))
+                    if is_parent:
+                        if not has_mod:
+                            self.clearSelection()
+                        self._set_current_item_no_update(item)
+                    elif item.isSelected() and not item.isHidden():
+                        self._set_current_item_no_update(item)
+                    else:
+                        if not has_mod:
+                            self.clearSelection()
+                        item.setSelected(True)
+                        self._set_current_item_no_update(item)
+                else:
+                    if not has_mod:
+                        self.clearSelection()
+                event.accept()
+                return
+
             if event.button() == Qt.MouseButton.LeftButton:
                 self._press_pos = pos
                 item = self.itemAt(pos)
                 modifiers = event.modifiers()
 
                 was_selected = False
-                if item is not None:
+                if item is not None and not item.isHidden():
                     is_parent = bool(item.data(Qt.ItemDataRole.UserRole + 1))
                     was_selected = item.isSelected() and not is_parent
 
@@ -3206,11 +3600,15 @@ def run_pyqt6_app() -> None:
                     and not (modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier))
                 ):
                     self._drag_mode = "file_drag"
-                    self.setCurrentItem(item)
+                    self._pressed_item = item
+                    self._drag_paths = self.selected_file_paths()
+                    self._set_current_item_no_update(item)
                     event.accept()
                     return
 
                 self._drag_mode = "marquee"
+                self._pressed_item = None
+                self._drag_paths = []
                 if modifiers & Qt.KeyboardModifier.ControlModifier:
                     self._initial_selected_rows = self._selected_valid_indices()
                 else:
@@ -3219,6 +3617,21 @@ def run_pyqt6_app() -> None:
                 return
 
             super().mousePressEvent(event)
+
+        def mouseDoubleClickEvent(self, event) -> None:
+            if event.button() == Qt.MouseButton.LeftButton:
+                self.paneFocused.emit()
+                pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+                item = self.itemAt(pos)
+                self._press_pos = None
+                self._drag_mode = "none"
+                self._pressed_item = None
+                self._drag_paths = []
+                if item is not None:
+                    self.itemDoubleClicked.emit(item)
+                    event.accept()
+                    return
+            super().mouseDoubleClickEvent(event)
 
         def mouseMoveEvent(self, event) -> None:
             if not (event.buttons() & Qt.MouseButton.LeftButton) or self._press_pos is None:
@@ -3232,7 +3645,9 @@ def run_pyqt6_app() -> None:
                 if dist >= QApplication.startDragDistance():
                     self._drag_mode = "none"
                     self._press_pos = None
+                    self._pressed_item = None
                     self.startDrag(Qt.DropAction.CopyAction | Qt.DropAction.MoveAction)
+                event.accept()
                 return
 
             if self._drag_mode == "marquee":
@@ -3253,14 +3668,23 @@ def run_pyqt6_app() -> None:
                 if self._rubber_band.isVisible():
                     self._rubber_band.hide()
                 elif self._drag_mode == "file_drag" and self._press_pos is not None:
-                    item = self.itemAt(pos)
-                    if item is not None:
+                    target_item = self.itemAt(pos)
+                    if target_item is None or bool(target_item.data(Qt.ItemDataRole.UserRole + 1)):
+                        target_item = self._pressed_item
+                    if target_item is not None and not bool(target_item.data(Qt.ItemDataRole.UserRole + 1)):
                         self.clearSelection()
-                        if not bool(item.data(Qt.ItemDataRole.UserRole + 1)):
-                            item.setSelected(True)
-                        self.setCurrentItem(item)
+                        target_item.setSelected(True)
+                        self._set_current_item_no_update(target_item)
+                    self._press_pos = None
+                    self._drag_mode = "none"
+                    self._pressed_item = None
+                    self._drag_paths = []
+                    event.accept()
+                    return
                 self._press_pos = None
                 self._drag_mode = "none"
+                self._pressed_item = None
+                self._drag_paths = []
             super().mouseReleaseEvent(event)
 
         def _update_marquee_selection(self, rect: QRect, modifiers: Qt.KeyboardModifier) -> None:
@@ -3289,15 +3713,26 @@ def run_pyqt6_app() -> None:
 
         def selected_file_paths(self) -> List[str]:
             paths: List[str] = []
-            for item in self.selectedItems():
-                is_parent = item.data(Qt.ItemDataRole.UserRole + 1)
+            seen_paths: set[str] = set()
+            for idx_row in sorted(self._selected_valid_indices()):
+                item = self.item(idx_row)
+                if item is None:
+                    continue
+                is_parent = bool(item.data(Qt.ItemDataRole.UserRole + 1))
                 p = item.data(Qt.ItemDataRole.UserRole)
                 if p and not is_parent:
-                    paths.append(str(p))
+                    p_str = str(p)
+                    norm_key = os.path.normcase(safe_norm_path(p_str))
+                    if norm_key not in seen_paths:
+                        seen_paths.add(norm_key)
+                        paths.append(p_str)
             return paths
 
         def startDrag(self, supportedActions) -> None:
-            paths = self.selected_file_paths()
+            try:
+                paths = list(self._drag_paths) if self._drag_paths else self.selected_file_paths()
+            finally:
+                self._drag_paths = []
             if not paths:
                 return
             mime = QMimeData()
@@ -3324,21 +3759,28 @@ def run_pyqt6_app() -> None:
             if not event.mimeData().hasUrls():
                 return
             src_paths: List[str] = []
+            seen_src: set[str] = set()
             for url in event.mimeData().urls():
                 if url.isLocalFile():
                     local_p = url.toLocalFile()
-                    if os.path.exists(local_p):
-                        src_paths.append(safe_norm_path(local_p))
+                    if local_p and os.path.exists(local_p):
+                        norm_p = safe_norm_path(local_p)
+                        norm_key = os.path.normcase(norm_p)
+                        if norm_key not in seen_src:
+                            seen_src.add(norm_key)
+                            src_paths.append(norm_p)
             if not src_paths:
                 return
 
             target_dir = self.dir_tab.current_path
-            pos = event.position().toPoint()
+            pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
             item = self.itemAt(pos)
             if item is not None:
                 candidate_path = item.data(Qt.ItemDataRole.UserRole)
                 if candidate_path and os.path.isdir(candidate_path):
-                    target_dir = str(candidate_path)
+                    cand_norm = safe_norm_path(str(candidate_path))
+                    if os.path.normcase(cand_norm) not in seen_src:
+                        target_dir = cand_norm
 
             modifiers = event.modifiers()
             event.acceptProposedAction()
@@ -3369,6 +3811,7 @@ def run_pyqt6_app() -> None:
             self.history: List[str] = []
             self.history_index: int = -1
             self.current_path: str = ""
+            self._handling_address_enter: bool = False
 
             self.view_mode: str = self.main_window.default_view_mode
             self.extra_zoom_px: int = 148
@@ -3405,20 +3848,25 @@ def run_pyqt6_app() -> None:
             self.btn_refresh.setToolTip("새로고침 (F5)")
             self.btn_refresh.clicked.connect(self.refresh)
 
-            self.address_edit = QLineEdit()
-            self.address_edit.setPlaceholderText("폴더 경로 또는 file:/// 주소 입력 후 Enter")
+            self.address_edit = AddressLineEdit()
+            self.address_edit.setPlaceholderText("폴더/파일 경로 또는 file:/// 주소 입력 후 Enter")
+            self.address_edit.focused.connect(self.paneActivated.emit)
             self.address_edit.returnPressed.connect(self._on_address_entered)
+            self.address_edit.escapePressed.connect(self._on_address_escaped)
 
             self.btn_star = QToolButton()
             self.btn_star.setText("⭐")
             self.btn_star.setToolTip("현재 폴더를 즐겨찾기 바에 추가")
             self.btn_star.clicked.connect(self._add_current_to_favorites)
 
-            self.filter_edit = QLineEdit()
+            self.filter_edit = FilterLineEdit()
             self.filter_edit.setPlaceholderText("🔍 이름/확장자 필터...")
             self.filter_edit.setFixedWidth(135)
             self.filter_edit.setClearButtonEnabled(True)
+            self.filter_edit.focused.connect(self.paneActivated.emit)
             self.filter_edit.textChanged.connect(self.apply_filter)
+            self.filter_edit.returnPressed.connect(lambda: self.stack.currentWidget().setFocus())
+            self.filter_edit.escapePressed.connect(self._on_filter_escaped)
 
             for w in (self.btn_back, self.btn_forward, self.btn_up, self.btn_refresh):
                 w.setFixedSize(28, 28)
@@ -3476,30 +3924,113 @@ def run_pyqt6_app() -> None:
                 return self.icon_list.selected_file_paths()
             return self.table.selected_file_paths()
 
-        def select_specific_file(self, target_file_path: str) -> None:
-            norm_target = safe_norm_path(target_file_path).lower()
+        def _reset_safe_focus_index(self) -> None:
+            """
+            목록 새로고침 직후 선택 상태를 비우고 기본 포커스 커서를 0번 상위 폴더('..')가 아닌
+            첫 번째 실제 항목(없으면 무효 인덱스)에 두어 의도치 않은 상위 폴더 이동을 방지합니다.
+            """
+            self.table.clearSelection()
+            tbl_sel = self.table.selectionModel()
+            first_tbl_row = -1
+            for r in range(self.table.rowCount()):
+                if self.table.isRowHidden(r):
+                    continue
+                it = self.table.item(r, 0)
+                if it is not None and not bool(it.data(Qt.ItemDataRole.UserRole + 1)):
+                    first_tbl_row = r
+                    break
+            if tbl_sel is not None:
+                target_idx = (
+                    self.table.model().index(first_tbl_row, 0)
+                    if first_tbl_row >= 0
+                    else self.table.model().index(-1, -1)
+                )
+                tbl_sel.setCurrentIndex(target_idx, QItemSelectionModel.SelectionFlag.NoUpdate)
+
+            self.icon_list.clearSelection()
+            lst_sel = self.icon_list.selectionModel()
+            first_lst_row = -1
+            for i in range(self.icon_list.count()):
+                l_it = self.icon_list.item(i)
+                if l_it is None or l_it.isHidden():
+                    continue
+                if not bool(l_it.data(Qt.ItemDataRole.UserRole + 1)):
+                    first_lst_row = i
+                    break
+            if lst_sel is not None:
+                target_l_idx = (
+                    self.icon_list.model().index(first_lst_row, 0)
+                    if first_lst_row >= 0
+                    else self.icon_list.model().index(-1, -1)
+                )
+                lst_sel.setCurrentIndex(target_l_idx, QItemSelectionModel.SelectionFlag.NoUpdate)
+
+        def _ensure_non_parent_current_index(self) -> None:
+            """위젯 포커스 진입 시 Qt 기본 동작이 0번 '..' 항목으로 커서를 되돌리지 않도록 보호합니다."""
+            if self.selected_file_paths():
+                return
+            if self.stack.currentWidget() == self.icon_list:
+                curr_it = self.icon_list.currentItem()
+                if curr_it is None or bool(curr_it.data(Qt.ItemDataRole.UserRole + 1)):
+                    lst_sel = self.icon_list.selectionModel()
+                    for i in range(self.icon_list.count()):
+                        it = self.icon_list.item(i)
+                        if it is not None and not it.isHidden() and not bool(it.data(Qt.ItemDataRole.UserRole + 1)):
+                            if lst_sel is not None:
+                                lst_sel.setCurrentIndex(
+                                    self.icon_list.model().index(i, 0),
+                                    QItemSelectionModel.SelectionFlag.NoUpdate,
+                                )
+                            break
+            else:
+                curr_row = self.table.currentRow()
+                curr_item = self.table.item(curr_row, 0) if curr_row >= 0 else None
+                if curr_item is None or bool(curr_item.data(Qt.ItemDataRole.UserRole + 1)):
+                    tbl_sel = self.table.selectionModel()
+                    for r in range(self.table.rowCount()):
+                        it = self.table.item(r, 0)
+                        if it is not None and not self.table.isRowHidden(r) and not bool(it.data(Qt.ItemDataRole.UserRole + 1)):
+                            if tbl_sel is not None:
+                                tbl_sel.setCurrentIndex(
+                                    self.table.model().index(r, 0),
+                                    QItemSelectionModel.SelectionFlag.NoUpdate,
+                                )
+                            break
+
+        def select_specific_file(self, target_file_path: str) -> bool:
+            norm_target = safe_norm_path(target_file_path).casefold()
+            if self.filter_edit.text().strip():
+                target_name_cf = Path(target_file_path).name.casefold()
+                if self.filter_edit.text().strip().casefold() not in target_name_cf:
+                    self.filter_edit.clear()
+
             if self.stack.currentWidget() == self.icon_list:
                 self.icon_list.clearSelection()
                 for i in range(self.icon_list.count()):
                     it = self.icon_list.item(i)
                     if it is not None:
                         p = it.data(Qt.ItemDataRole.UserRole)
-                        if p and safe_norm_path(str(p)).lower() == norm_target:
-                            it.setSelected(True)
+                        if p and safe_norm_path(str(p)).casefold() == norm_target:
                             self.icon_list.setCurrentItem(it)
-                            self.icon_list.scrollToItem(it)
-                            break
+                            it.setSelected(True)
+                            self.icon_list.scrollToItem(
+                                it, QAbstractItemView.ScrollHint.PositionAtCenter
+                            )
+                            return True
             else:
                 self.table.clearSelection()
                 for row in range(self.table.rowCount()):
                     it = self.table.item(row, 0)
                     if it is not None:
                         p = it.data(Qt.ItemDataRole.UserRole)
-                        if p and safe_norm_path(str(p)).lower() == norm_target:
-                            self.table.selectRow(row)
+                        if p and safe_norm_path(str(p)).casefold() == norm_target:
                             self.table.setCurrentCell(row, 0)
-                            self.table.scrollToItem(it)
-                            break
+                            self.table.selectRow(row)
+                            self.table.scrollToItem(
+                                it, QAbstractItemView.ScrollHint.PositionAtCenter
+                            )
+                            return True
+            return False
 
         def set_view_mode(self, mode: str) -> None:
             self.view_mode = mode
@@ -3554,24 +4085,58 @@ def run_pyqt6_app() -> None:
             self.group_by = group_by
             self.refresh()
 
-        def navigate_to(self, path_str: str, record_history: bool = True) -> bool:
-            decoded_str = normalize_user_input_path(path_str)
-            if not decoded_str:
+        def navigate_to(
+            self,
+            path_str: str,
+            record_history: bool = True,
+            activate_file: bool = False,
+            allow_missing_file_parent: bool = True,
+        ) -> bool:
+            resolved = resolve_address_bar_target(
+                path_str,
+                allow_missing_file_parent=allow_missing_file_parent,
+            )
+            kind = str(resolved["kind"])
+            decoded_str = str(resolved["normalized_input"])
+
+            if kind == "empty":
                 self.address_edit.setText(self.current_path)
                 return False
 
-            target = Path(decoded_str)
-
-            # 주소창에 파일 경로를 입력한 경우 상위 폴더로 이동 후 해당 파일을 선택 및 실행
-            if target.exists() and target.is_file():
-                parent_dir = safe_norm_path(str(target.parent))
-                file_norm = safe_norm_path(str(target))
-                if self.navigate_to(parent_dir, record_history=record_history):
+            # 파일 경로 입력 시: 해당 파일이 담긴 마지막(부모) 디렉터리로 진입 후 파일을 선택·포커싱만 수행 (기본값 activate_file=False)
+            if kind == "existing_file":
+                parent_dir = str(resolved["target_dir"])
+                file_norm = str(resolved["select_file"])
+                if self.navigate_to(
+                    parent_dir,
+                    record_history=record_history,
+                    activate_file=False,
+                    allow_missing_file_parent=False,
+                ):
                     self.select_specific_file(file_norm)
-                    self._activate_path(file_norm)
+                    if activate_file:
+                        self._activate_path(file_norm)
                     return True
+                return False
 
-            if not target.exists() or not target.is_dir():
+            # 존재하지 않는 파일명이 붙은 경로라도 부모 디렉터리가 실제 존재하면 해당 디렉터리로 안전 이동 후 상태 안내
+            if kind == "missing_file_in_existing_dir":
+                parent_dir = str(resolved["target_dir"])
+                missing_name = str(resolved["missing_leaf_name"])
+                if self.navigate_to(
+                    parent_dir,
+                    record_history=record_history,
+                    activate_file=False,
+                    allow_missing_file_parent=False,
+                ):
+                    self.main_window.show_status_message(
+                        f"ℹ️ '{missing_name}' 파일이 아직 없어 상위 폴더('{parent_dir}')로 이동했습니다.",
+                        4500,
+                    )
+                    return True
+                return False
+
+            if kind != "dir":
                 QMessageBox.warning(
                     self,
                     "경로 오류",
@@ -3580,7 +4145,7 @@ def run_pyqt6_app() -> None:
                 self.address_edit.setText(self.current_path)
                 return False
 
-            norm_path = safe_norm_path(str(target))
+            norm_path = str(resolved["target_dir"])
             self.current_path = norm_path
             self.address_edit.setText(norm_path)
             self.address_edit.setToolTip(f"전체 경로: {norm_path}\n(클릭하여 직접 경로 편집 후 Enter)")
@@ -3591,7 +4156,7 @@ def run_pyqt6_app() -> None:
                     self.history = self.history[: self.history_index + 1]
                 if not self.history or self.history[-1] != norm_path:
                     self.history.append(norm_path)
-                    self.history_index = len(self.history) - 1
+                self.history_index = len(self.history) - 1
 
             self.btn_back.setEnabled(self.history_index > 0)
             self.btn_forward.setEnabled(self.history_index < len(self.history) - 1)
@@ -3601,11 +4166,26 @@ def run_pyqt6_app() -> None:
             return True
 
         def _on_address_entered(self) -> None:
-            self.paneActivated.emit()
-            text = self.address_edit.text().strip()
-            if text:
-                if self.navigate_to(text, record_history=True):
+            self._handling_address_enter = True
+            try:
+                self.paneActivated.emit()
+                raw_text = self.address_edit.text()
+                if not _clean_raw_path_text(raw_text):
+                    self.address_edit.setText(self.current_path)
+                    return
+                if self.navigate_to(raw_text, record_history=True, activate_file=False):
                     self.stack.currentWidget().setFocus()
+            finally:
+                self._handling_address_enter = False
+
+        def _on_address_escaped(self) -> None:
+            self.address_edit.setText(self.current_path)
+            self.stack.currentWidget().setFocus()
+
+        def _on_filter_escaped(self) -> None:
+            if self.filter_edit.text():
+                self.filter_edit.clear()
+            self.stack.currentWidget().setFocus()
 
         def go_back(self) -> None:
             self.paneActivated.emit()
@@ -3736,6 +4316,7 @@ def run_pyqt6_app() -> None:
                 self._populate_icon_view(p, records, has_parent)
 
             self.apply_filter(self.filter_edit.text())
+            self._reset_safe_focus_index()
             self.update_status_summary()
 
         def _populate_table_view(
@@ -4200,6 +4781,19 @@ def run_pyqt6_app() -> None:
         def _on_files_dropped(
             self, src_paths: List[str], target_dir: str, modifiers: Qt.KeyboardModifier
         ) -> None:
+            paths_snapshot: List[str] = []
+            seen_src: set[str] = set()
+            for raw_p in list(src_paths):
+                if not raw_p:
+                    continue
+                norm_p = safe_norm_path(str(raw_p))
+                norm_key = os.path.normcase(norm_p)
+                if norm_key not in seen_src:
+                    seen_src.add(norm_key)
+                    paths_snapshot.append(norm_p)
+            if not paths_snapshot:
+                return
+
             self.paneActivated.emit()
             if modifiers & Qt.KeyboardModifier.ShiftModifier:
                 mode = "move"
@@ -4207,8 +4801,8 @@ def run_pyqt6_app() -> None:
                 mode = "copy"
             else:
                 menu = QMenu(self)
-                act_copy = menu.addAction(f"📄 여기에 복사 ({len(src_paths)}개 항목)")
-                act_move = menu.addAction(f"✂️ 여기에 이동 ({len(src_paths)}개 항목)")
+                act_copy = menu.addAction(f"📄 여기에 복사 ({len(paths_snapshot)}개 항목)")
+                act_move = menu.addAction(f"✂️ 여기에 이동 ({len(paths_snapshot)}개 항목)")
                 menu.addSeparator()
                 menu.addAction("❌ 취소")
                 chosen = menu.exec(self.cursor().pos())
@@ -4219,13 +4813,13 @@ def run_pyqt6_app() -> None:
                 else:
                     return
 
-            count, errors = perform_file_transfer_qt(self, src_paths, target_dir, mode=mode)
+            count, errors = perform_file_transfer_qt(self, paths_snapshot, target_dir, mode=mode)
             self.main_window.refresh_all_panes()
             if errors:
                 QMessageBox.warning(self, "작업 중 오류 발생", "\n".join(errors[:10]))
             else:
                 action_kr = "이동" if mode == "move" else "복사"
-                self.main_window.statusBar().showMessage(
+                self.main_window.show_status_message(
                     f"✅ {count}개 항목을 '{target_dir}'(으)로 {action_kr}했습니다.", 4000
                 )
 
@@ -4264,6 +4858,7 @@ def run_pyqt6_app() -> None:
                 act_v.triggered.connect(lambda checked=False, k=v_key: self.set_view_mode(k))
 
             if selected_paths:
+                selected_snapshot = list(selected_paths)
                 copy_to_menu = menu.addMenu("📑 다른 패널로 즉시 복사")
                 move_to_menu = menu.addMenu("📦 다른 패널로 즉시 이동")
                 for idx, other_pane in enumerate(self.main_window.panes):
@@ -4273,18 +4868,26 @@ def run_pyqt6_app() -> None:
                     label = f"[{idx + 1}번 창] {Path(dest_path).name or dest_path} ({dest_path})"
                     c_act = copy_to_menu.addAction(label)
                     c_act.triggered.connect(
-                        lambda checked=False, d=dest_path: self._transfer_to_pane(selected_paths, d, "copy")
+                        lambda checked=False, s=list(selected_snapshot), d=dest_path: self._transfer_to_pane(
+                            s, d, "copy"
+                        )
                     )
                     m_act = move_to_menu.addAction(label)
                     m_act.triggered.connect(
-                        lambda checked=False, d=dest_path: self._transfer_to_pane(selected_paths, d, "move")
+                        lambda checked=False, s=list(selected_snapshot), d=dest_path: self._transfer_to_pane(
+                            s, d, "move"
+                        )
                     )
                 menu.addSeparator()
 
                 act_copy = menu.addAction("📋 복사 (Ctrl+C)")
                 act_cut = menu.addAction("✂️ 잘라내기 (Ctrl+X)")
-                act_copy.triggered.connect(lambda: self.main_window.set_clipboard_files(selected_paths, "copy"))
-                act_cut.triggered.connect(lambda: self.main_window.set_clipboard_files(selected_paths, "move"))
+                act_copy.triggered.connect(
+                    lambda checked=False, s=list(selected_snapshot): self.main_window.set_clipboard_files(s, "copy")
+                )
+                act_cut.triggered.connect(
+                    lambda checked=False, s=list(selected_snapshot): self.main_window.set_clipboard_files(s, "move")
+                )
 
                 menu.addSeparator()
                 arch_menu = menu.addMenu("🗜️ 압축 / 압축 풀기")
@@ -4339,10 +4942,15 @@ def run_pyqt6_app() -> None:
                 act_delete.triggered.connect(self.delete_selected_items)
 
             menu.addSeparator()
-            act_copy_path = menu.addAction("🔗 현재/선택 경로 클립보드 복사")
+            copy_path_label = (
+                f"🔗 선택 경로 {len(selected_paths)}개 클립보드 복사 (줄바꿈)"
+                if len(selected_paths) > 1
+                else "🔗 현재/선택 경로 클립보드 복사"
+            )
+            act_copy_path = menu.addAction(copy_path_label)
             act_copy_path.triggered.connect(
-                lambda: QApplication.clipboard().setText(
-                    selected_paths[0] if selected_paths else self.current_path
+                lambda checked=False, s=list(selected_paths), curr=self.current_path: QApplication.clipboard().setText(
+                    "\n".join(s) if s else curr
                 )
             )
             act_open_os = menu.addAction("🪟 Windows 기본 탐색기에서 열기")
@@ -4354,6 +4962,10 @@ def run_pyqt6_app() -> None:
                 act_prop = menu.addAction("ℹ️ 상세 속성 및 파일 헤더 진단")
                 act_prop.triggered.connect(lambda: self._show_properties(selected_paths[0]))
 
+            addons_ctrl = getattr(self.main_window, "_addons_controller", None)
+            if addons_ctrl is not None and hasattr(addons_ctrl, "populate_tab_context_menu"):
+                addons_ctrl.populate_tab_context_menu(menu, self, selected_paths)
+
             active_viewport = (
                 self.icon_list.viewport()
                 if self.stack.currentWidget() == self.icon_list
@@ -4362,30 +4974,43 @@ def run_pyqt6_app() -> None:
             menu.exec(active_viewport.mapToGlobal(pos))
 
         def _transfer_to_pane(self, src_paths: List[str], dest_dir: str, mode: str) -> None:
-            count, errors = perform_file_transfer_qt(self, src_paths, dest_dir, mode=mode)
+            paths_snapshot = list(src_paths)
+            if not paths_snapshot:
+                return
+            count, errors = perform_file_transfer_qt(self, paths_snapshot, dest_dir, mode=mode)
             self.main_window.refresh_all_panes()
             if errors:
                 QMessageBox.warning(self, "오류", "\n".join(errors[:10]))
             else:
                 action_kr = "이동" if mode == "move" else "복사"
-                self.main_window.statusBar().showMessage(
+                self.main_window.show_status_message(
                     f"✅ {count}개 항목을 '{dest_dir}'(으)로 {action_kr} 완료!", 4000
                 )
 
         def paste_files_here(self) -> None:
-            if not self.main_window.clipboard_paths:
+            paths_snapshot = list(self.main_window.clipboard_paths)
+            if not paths_snapshot:
                 return
+            mode = self.main_window.clipboard_mode
             count, errors = perform_file_transfer_qt(
                 self,
-                self.main_window.clipboard_paths,
+                paths_snapshot,
                 self.current_path,
-                mode=self.main_window.clipboard_mode,
+                mode=mode,
             )
-            if self.main_window.clipboard_mode == "move" and count > 0:
-                self.main_window.clipboard_paths.clear()
+            if mode == "move" and count > 0:
+                if errors:
+                    self.main_window.clipboard_paths = [p for p in paths_snapshot if os.path.exists(p)]
+                else:
+                    self.main_window.clipboard_paths.clear()
             self.main_window.refresh_all_panes()
             if errors:
                 QMessageBox.warning(self, "붙여넣기 오류", "\n".join(errors[:10]))
+            elif count > 0:
+                action_kr = "이동" if mode == "move" else "복사"
+                self.main_window.show_status_message(
+                    f"✅ {count}개 항목을 '{self.current_path}'(으)로 {action_kr}했습니다.", 4000
+                )
 
         def create_new_folder(self) -> None:
             name, ok = QInputDialog.getText(self, "새 폴더 만들기", "새 폴더 이름을 입력하세요:", text="새 폴더")
@@ -4966,6 +5591,7 @@ def run_pyqt6_app() -> None:
             self.tab_widget.tabBar().setElideMode(Qt.TextElideMode.ElideMiddle)
             self.tab_widget.tabCloseRequested.connect(self.close_tab)
             self.tab_widget.currentChanged.connect(self._on_tab_changed)
+            self.tab_widget.tabBarClicked.connect(lambda _idx: self.paneActivated.emit(self.pane_index))
             layout.addWidget(self.tab_widget, stretch=1)
 
         def set_active_visual(self, is_active: bool) -> None:
@@ -4994,6 +5620,12 @@ def run_pyqt6_app() -> None:
             if self.tab_widget.count() <= 1:
                 return
             w = self.tab_widget.widget(index)
+            controller = getattr(self.main_window, "_addons_controller", None)
+            if controller is not None and w is not None:
+                if not controller.tab_locks.can_close_tab(w):
+                    controller._notify("🔒 잠긴 탭은 닫을 수 없습니다. (Ctrl+Shift+L로 잠금 해제)")
+                    return
+                controller.tab_locks.unregister(w)
             self.tab_widget.removeTab(index)
             if w is not None:
                 w.deleteLater()
@@ -5362,6 +5994,19 @@ def run_pyqt6_app() -> None:
             self._refresh_toolbar_icons()
             self.set_layout_mode(self.current_layout_mode)
             self._set_active_pane(self.active_pane_index)
+            try:
+                from pyquaddir_addons import install_pyquaddir_addons
+                controller = install_pyquaddir_addons(self)
+                if hasattr(self, "menuBar"):
+                    self.tools_access_menu = self.menuBar().addMenu("도구(&T)")
+                    self.tools_access_menu.aboutToShow.connect(
+                        lambda: controller.populate_tools_menu(self.tools_access_menu)
+                    )
+                    self.help_access_menu = self.menuBar().addMenu("도움말(&H)")
+                    self.help_access_menu.addAction("버전정보").triggered.connect(self.show_version_info)
+                    self._apply_theme()
+            except Exception:
+                pass
             self._apply_responsive_viewport(self.width(), force=True)
 
             self._config_dirty = False
@@ -5537,6 +6182,17 @@ def run_pyqt6_app() -> None:
             self.btn_del.setToolTip("선택 항목 삭제 (Delete)")
             self.btn_del.clicked.connect(self._shortcut_delete)
             cmd_tb.addWidget(self.btn_del)
+
+            for tb_btn in (
+                self.act_cut,
+                self.act_copy,
+                self.act_paste,
+                self.act_rename,
+                self.btn_send,
+                self.btn_archive,
+                self.btn_del,
+            ):
+                tb_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
             cmd_tb.addSeparator()
 
@@ -5767,8 +6423,8 @@ def run_pyqt6_app() -> None:
         def _populate_send_menu(self) -> None:
             self.send_menu.clear()
             t = self.active_pane().current_tab()
-            sel = t.selected_file_paths() if t else []
-            if not sel:
+            sel = list(t.selected_file_paths()) if t else []
+            if not sel or t is None:
                 act_empty = self.send_menu.addAction("⚠️ 먼저 전송할 파일이나 폴더를 선택하세요")
                 act_empty.setEnabled(False)
                 return
@@ -5776,15 +6432,23 @@ def run_pyqt6_app() -> None:
             self.send_menu.addSection(f"📑 선택 항목 ({len(sel)}개) 다른 창으로 복사")
             for idx, pane in enumerate(self.panes):
                 dest = pane.current_path()
+                if not dest:
+                    continue
                 act_c = self.send_menu.addAction(f"📄 [{idx + 1}번 창]으로 복사 ({Path(dest).name or dest})")
-                act_c.triggered.connect(lambda checked=False, d=dest: t._transfer_to_pane(sel, d, "copy"))  # type: ignore[union-attr]
+                act_c.triggered.connect(
+                    lambda checked=False, tab=t, s=list(sel), d=dest: tab._transfer_to_pane(s, d, "copy")
+                )
 
             self.send_menu.addSeparator()
             self.send_menu.addSection(f"📦 선택 항목 ({len(sel)}개) 다른 창으로 이동")
             for idx, pane in enumerate(self.panes):
                 dest = pane.current_path()
+                if not dest:
+                    continue
                 act_m = self.send_menu.addAction(f"✂️ [{idx + 1}번 창]으로 이동 ({Path(dest).name or dest})")
-                act_m.triggered.connect(lambda checked=False, d=dest: t._transfer_to_pane(sel, d, "move"))  # type: ignore[union-attr]
+                act_m.triggered.connect(
+                    lambda checked=False, tab=t, s=list(sel), d=dest: tab._transfer_to_pane(s, d, "move")
+                )
 
         def _populate_sort_menu(self) -> None:
             self.sort_menu.clear()
@@ -6565,10 +7229,22 @@ def run_pyqt6_app() -> None:
                 self.save_config()
 
         def set_clipboard_files(self, paths: List[str], mode: str) -> None:
-            self.clipboard_paths = list(paths)
+            cleaned: List[str] = []
+            seen: set[str] = set()
+            for raw_p in list(paths):
+                if not raw_p:
+                    continue
+                norm_p = safe_norm_path(str(raw_p))
+                norm_key = os.path.normcase(norm_p)
+                if norm_key not in seen:
+                    seen.add(norm_key)
+                    cleaned.append(norm_p)
+            self.clipboard_paths = cleaned
             self.clipboard_mode = mode
             action_kr = "잘라내기(이동 대기)" if mode == "move" else "복사 대기"
-            self.statusBar().showMessage(f"📋 {len(paths)}개 항목 {action_kr} 설정됨 (Ctrl+V로 붙여넣기)", 4000)
+            self.show_status_message(
+                f"📋 {len(cleaned)}개 항목 {action_kr} 설정됨 (Ctrl+V로 붙여넣기)", 4000
+            )
 
         def refresh_all_panes(self) -> None:
             self._rebuild_favorites_bar()
@@ -6591,12 +7267,34 @@ def run_pyqt6_app() -> None:
             p = self.active_pane()
             p.close_tab(p.tab_widget.currentIndex())
 
+        def _is_text_input_focused(self) -> bool:
+            fw = QApplication.focusWidget() if hasattr(QApplication, 'focusWidget') else None
+            if fw is not None and isinstance(fw, (QLineEdit, QPlainTextEdit, QTextBrowser)):
+                return True
+            for pane in self.panes:
+                tab = pane.current_tab()
+                if tab is not None and (
+                    tab.address_edit.hasFocus()
+                    or tab.filter_edit.hasFocus()
+                    or getattr(tab, "_handling_address_enter", False)
+                ):
+                    return True
+            return False
+
         def _shortcut_rename(self) -> None:
+            if self._is_text_input_focused():
+                return
             t = self.active_pane().current_tab()
             if t:
+                controller = getattr(self, "_addons_controller", None)
+                if controller is not None and len(t.selected_file_paths()) >= 2:
+                    controller.open_multi_rename()
+                    return
                 t.rename_selected_item()
 
         def _shortcut_delete(self) -> None:
+            if self._is_text_input_focused():
+                return
             t = self.active_pane().current_tab()
             if t:
                 t.delete_selected_items()
@@ -6607,6 +7305,8 @@ def run_pyqt6_app() -> None:
                 t.create_new_folder()
 
         def _shortcut_copy(self) -> None:
+            if self._is_text_input_focused():
+                return
             t = self.active_pane().current_tab()
             if t:
                 sel = t.selected_file_paths()
@@ -6614,6 +7314,8 @@ def run_pyqt6_app() -> None:
                     self.set_clipboard_files(sel, "copy")
 
         def _shortcut_cut(self) -> None:
+            if self._is_text_input_focused():
+                return
             t = self.active_pane().current_tab()
             if t:
                 sel = t.selected_file_paths()
@@ -6621,21 +7323,29 @@ def run_pyqt6_app() -> None:
                     self.set_clipboard_files(sel, "move")
 
         def _shortcut_paste(self) -> None:
+            if self._is_text_input_focused():
+                return
             t = self.active_pane().current_tab()
             if t:
                 t.paste_files_here()
 
         def _shortcut_up(self) -> None:
+            if self._is_text_input_focused():
+                return
             t = self.active_pane().current_tab()
-            if t and not t.address_edit.hasFocus() and not t.filter_edit.hasFocus():
+            if t:
                 t.go_up()
 
         def _shortcut_back(self) -> None:
+            if self._is_text_input_focused():
+                return
             t = self.active_pane().current_tab()
             if t:
                 t.go_back()
 
         def _shortcut_forward(self) -> None:
+            if self._is_text_input_focused():
+                return
             t = self.active_pane().current_tab()
             if t:
                 t.go_forward()
@@ -6652,8 +7362,11 @@ def run_pyqt6_app() -> None:
 
         def keyPressEvent(self, event) -> None:
             if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if self._is_text_input_focused():
+                    event.accept()
+                    return
                 t = self.active_pane().current_tab()
-                if t and not t.address_edit.hasFocus() and not t.filter_edit.hasFocus():
+                if t and not getattr(t, "_handling_address_enter", False):
                     t.activate_selected_or_current()
                     event.accept()
                     return
@@ -6663,6 +7376,8 @@ def run_pyqt6_app() -> None:
             if self.dark_mode:
                 qss = """
                 QMainWindow, QDialog { background-color: #0B1120; color: #F8FAFC; }
+                QMenuBar { background-color: #1E293B; color: #F8FAFC; }
+                QMenuBar::item:selected { background-color: #2563EB; color: #FFFFFF; }
                 QLabel, QCheckBox, QRadioButton { color: #F8FAFC; background: transparent; }
                 QToolBar { background-color: #1E293B; border-bottom: 1px solid #334155; spacing: 5px; padding: 4px 6px; }
                 QToolBar#FavToolbar QLabel#FavTitleLabel { color: #FBBF24; font-weight: 700; font-size: 12px; }
@@ -6711,6 +7426,8 @@ def run_pyqt6_app() -> None:
             else:
                 qss = """
                 QMainWindow, QDialog { background-color: #E2E8F0; color: #0F172A; }
+                QMenuBar { background-color: #FFFFFF; color: #0F172A; }
+                QMenuBar::item:selected { background-color: #2563EB; color: #FFFFFF; }
                 QLabel, QCheckBox, QRadioButton { color: #0F172A; background: transparent; }
                 QToolBar { background-color: #FFFFFF; border-bottom: 1px solid #CBD5E1; spacing: 5px; padding: 4px 6px; }
                 QToolBar#FavToolbar QLabel#FavTitleLabel { color: #0F172A; font-weight: 700; font-size: 12px; }
@@ -6815,16 +7532,22 @@ def run_tkinter_app() -> None:
             ttk.Button(nav, text="🔄", width=3, command=self.refresh).pack(side=tk.LEFT, padx=1)
 
             self.addr_var = tk.StringVar(value=self.current_path)
-            addr_entry = ttk.Entry(nav, textvariable=self.addr_var)
-            addr_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3)
-            addr_entry.bind("<Return>", lambda e: self.navigate_to(self.addr_var.get()))
+            self.addr_entry = ttk.Entry(nav, textvariable=self.addr_var)
+            self.addr_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3)
+            self.addr_entry.bind("<FocusIn>", lambda e: self.app.set_active_pane(self.pane_idx))
+            self.addr_entry.bind("<Return>", self._on_address_return)
+            self.addr_entry.bind("<KP_Enter>", self._on_address_return)
+            self.addr_entry.bind("<Escape>", self._on_address_escape)
 
             ttk.Button(nav, text="⭐", width=3, command=lambda: self.app.add_favorite(self.current_path)).pack(side=tk.LEFT, padx=1)
 
             self.filter_var = tk.StringVar()
             self.filter_var.trace_add("write", lambda *_: self.refresh())
-            filter_entry = ttk.Entry(nav, textvariable=self.filter_var, width=14)
-            filter_entry.pack(side=tk.LEFT, padx=2)
+            self.filter_entry = ttk.Entry(nav, textvariable=self.filter_var, width=14)
+            self.filter_entry.pack(side=tk.LEFT, padx=2)
+            self.filter_entry.bind("<FocusIn>", lambda e: self.app.set_active_pane(self.pane_idx))
+            self.filter_entry.bind("<Return>", self._on_filter_return)
+            self.filter_entry.bind("<KP_Enter>", self._on_filter_return)
 
             tree_frame = ttk.Frame(self)
             tree_frame.pack(fill=tk.BOTH, expand=True, padx=3, pady=1)
@@ -6856,6 +7579,10 @@ def run_tkinter_app() -> None:
             self.tree.bind("<BackSpace>", lambda e: self.go_up())
             self._sweep_anchor_iid: Optional[str] = None
             self._drag_mode_tk: str = "none"
+            self._drag_paths_tk: List[str] = []
+            self._press_pos_tk: Optional[Tuple[int, int]] = None
+            self._pressed_iid_tk: Optional[str] = None
+            self._did_drag_tk: bool = False
             self.tree.bind("<ButtonPress-1>", self._on_drag_start)
             self.tree.bind("<B1-Motion>", self._on_drag_motion)
             self.tree.bind("<ButtonRelease-1>", self._on_drag_drop)
@@ -6881,32 +7608,103 @@ def run_tkinter_app() -> None:
                 sel.remove("..parent..")
                 self.tree.selection_set(sel)
 
-        def navigate_to(self, path_str: str, record: bool = True) -> None:
-            decoded_str = normalize_user_input_path(path_str)
-            p = Path(decoded_str)
-            if p.exists() and p.is_file():
-                parent_norm = safe_norm_path(str(p.parent))
-                self.navigate_to(parent_norm, record=record)
-                file_norm = safe_norm_path(str(p))
-                if file_norm in self.tree.get_children():
-                    self.tree.selection_set([file_norm])
-                    self.tree.see(file_norm)
-                self._activate_file(file_norm)
-                return
-
-            if not p.is_dir():
-                messagebox.showwarning("경로 오류", f"폴더를 찾을 수 없습니다:\n{decoded_str}")
+        def _on_address_return(self, event=None) -> str:
+            self.app.set_active_pane(self.pane_idx)
+            raw_text = self.addr_var.get()
+            if not _clean_raw_path_text(raw_text):
                 self.addr_var.set(self.current_path)
-                return
-            self.current_path = safe_norm_path(str(p))
+                return "break"
+            if self.navigate_to(raw_text, record=True, activate_file=False):
+                self.tree.focus_set()
+            return "break"
+
+        def _on_address_escape(self, event=None) -> str:
+            self.addr_var.set(self.current_path)
+            self.tree.focus_set()
+            return "break"
+
+        def _on_filter_return(self, event=None) -> str:
+            self.tree.focus_set()
+            return "break"
+
+        def select_specific_file(self, target_file_path: str) -> bool:
+            norm_target = safe_norm_path(target_file_path).casefold()
+            if self.filter_var.get().strip():
+                target_name_cf = Path(target_file_path).name.casefold()
+                if self.filter_var.get().strip().casefold() not in target_name_cf:
+                    self.filter_var.set("")
+            for iid in self.tree.get_children():
+                if iid != "..parent.." and safe_norm_path(str(iid)).casefold() == norm_target:
+                    self.tree.selection_set([iid])
+                    self.tree.focus(iid)
+                    self.tree.see(iid)
+                    return True
+            return False
+
+        def navigate_to(
+            self,
+            path_str: str,
+            record: bool = True,
+            activate_file: bool = False,
+            allow_missing_file_parent: bool = True,
+        ) -> bool:
+            resolved = resolve_address_bar_target(
+                path_str,
+                allow_missing_file_parent=allow_missing_file_parent,
+            )
+            kind = str(resolved["kind"])
+            decoded_str = str(resolved["normalized_input"])
+
+            if kind == "empty":
+                self.addr_var.set(self.current_path)
+                return False
+
+            if kind == "existing_file":
+                parent_norm = str(resolved["target_dir"])
+                file_norm = str(resolved["select_file"])
+                if self.navigate_to(
+                    parent_norm,
+                    record=record,
+                    activate_file=False,
+                    allow_missing_file_parent=False,
+                ):
+                    self.select_specific_file(file_norm)
+                    if activate_file:
+                        self._activate_file(file_norm)
+                    return True
+                return False
+
+            if kind == "missing_file_in_existing_dir":
+                parent_norm = str(resolved["target_dir"])
+                missing_name = str(resolved["missing_leaf_name"])
+                if self.navigate_to(
+                    parent_norm,
+                    record=record,
+                    activate_file=False,
+                    allow_missing_file_parent=False,
+                ):
+                    self.summary_var.set(
+                        f"ℹ️ '{missing_name}' 파일이 아직 없어 상위 폴더('{parent_norm}')로 이동했습니다."
+                    )
+                    return True
+                return False
+
+            if kind != "dir":
+                messagebox.showwarning("경로 오류", f"폴더나 파일을 찾을 수 없습니다:\n{decoded_str}")
+                self.addr_var.set(self.current_path)
+                return False
+
+            self.current_path = str(resolved["target_dir"])
             self.addr_var.set(self.current_path)
             if record:
                 self.history = self.history[: self.history_idx + 1]
-                self.history.append(self.current_path)
+                if not self.history or self.history[-1] != self.current_path:
+                    self.history.append(self.current_path)
                 self.history_idx = len(self.history) - 1
             self.refresh()
             self.app.update_tab_title(self.pane_idx, self)
             self.app.save_config()
+            return True
 
         def _activate_file(self, file_path: str) -> None:
             diag = diagnose_file_health(file_path)
@@ -6996,6 +7794,10 @@ def run_tkinter_app() -> None:
                     tags=(tag_name,) if tag_name else (),
                 )
 
+            real_children = [iid for iid in self.tree.get_children() if iid != "..parent.."]
+            self.tree.selection_set(())
+            self.tree.focus(real_children[0] if real_children else "")
+
             free_b, _ = _safe_disk_usage(self.current_path)
             self.summary_var.set(
                 f"폴더 {dir_cnt}개, 파일 {file_cnt}개 ({format_size(total_b)}) | 여유 {format_size(free_b)}"
@@ -7039,15 +7841,37 @@ def run_tkinter_app() -> None:
             elif os.path.exists(iid):
                 self._activate_file(iid)
 
-        def _on_drag_start(self, event) -> None:
+        def _on_drag_start(self, event) -> Optional[str]:
             self.app.set_active_pane(self.pane_idx)
             clicked_iid = self.tree.identify_row(event.y)
+            state_bits = int(getattr(event, "state", 0) or 0)
+            has_modifier = bool(state_bits & 0x0005)  # Shift(0x0001) | Control(0x0004)
+            if has_modifier:
+                self._drag_mode_tk = "none"
+                self._drag_paths_tk = []
+                self._press_pos_tk = None
+                self._pressed_iid_tk = None
+                self._did_drag_tk = False
+                self.app.drag_source_tab = None
+                return None
+
             current_sel = set(self.tree.selection())
             if clicked_iid and clicked_iid != "..parent.." and clicked_iid in current_sel:
                 self._drag_mode_tk = "transfer"
+                self._drag_paths_tk = self.selected_paths()
+                self._press_pos_tk = (int(event.x), int(event.y))
+                self._pressed_iid_tk = clicked_iid
+                self._did_drag_tk = False
                 self.app.drag_source_tab = self
-                return
+                self.tree.focus(clicked_iid)
+                self.tree.focus_set()
+                return "break"
+
             self._drag_mode_tk = "sweep"
+            self._drag_paths_tk = []
+            self._press_pos_tk = (int(event.x), int(event.y))
+            self._pressed_iid_tk = clicked_iid or None
+            self._did_drag_tk = False
             self.app.drag_source_tab = None
             all_items = [i for i in self.tree.get_children() if i != "..parent.."]
             if clicked_iid and clicked_iid != "..parent..":
@@ -7056,8 +7880,15 @@ def run_tkinter_app() -> None:
                 self._sweep_anchor_iid = all_items[-1] if event.y > 30 else all_items[0]
             else:
                 self._sweep_anchor_iid = None
+            return None
 
         def _on_drag_motion(self, event) -> Optional[str]:
+            if self._drag_mode_tk == "transfer":
+                if self._press_pos_tk is not None:
+                    dist = abs(int(event.x) - self._press_pos_tk[0]) + abs(int(event.y) - self._press_pos_tk[1])
+                    if dist >= 5:
+                        self._did_drag_tk = True
+                return "break"
             if self._drag_mode_tk != "sweep" or not self._sweep_anchor_iid:
                 return None
             all_items = [i for i in self.tree.get_children() if i != "..parent.."]
@@ -7074,17 +7905,37 @@ def run_tkinter_app() -> None:
             self.tree.see(curr_iid)
             return "break"
 
-        def _on_drag_drop(self, event) -> None:
+        def _on_drag_drop(self, event) -> Optional[str]:
             mode = getattr(self, "_drag_mode_tk", "none")
+            did_drag = bool(getattr(self, "_did_drag_tk", False))
+            pressed_iid = getattr(self, "_pressed_iid_tk", None)
+            drag_paths = list(getattr(self, "_drag_paths_tk", []))
+
             self._drag_mode_tk = "none"
             self._sweep_anchor_iid = None
+            self._drag_paths_tk = []
+            self._press_pos_tk = None
+            self._pressed_iid_tk = None
+            self._did_drag_tk = False
+
             src_tab = self.app.drag_source_tab
             self.app.drag_source_tab = None
-            if mode != "transfer" or not src_tab:
-                return
+
+            if mode != "transfer":
+                return None
+
+            if not did_drag:
+                if pressed_iid and pressed_iid != "..parent.." and pressed_iid in self.tree.get_children():
+                    self.tree.selection_set([pressed_iid])
+                    self.tree.focus(pressed_iid)
+                return "break"
+
+            if not src_tab:
+                return "break"
+
             w = self.winfo_containing(event.x_root, event.y_root)
             if w is None:
-                return
+                return "break"
             target_tab: Optional[TkDirectoryTab] = None
             curr = w
             while curr is not None:
@@ -7094,37 +7945,83 @@ def run_tkinter_app() -> None:
                 curr = getattr(curr, "master", None)
 
             if target_tab is not None and target_tab is not src_tab:
-                paths = src_tab.selected_paths()
+                raw_paths = drag_paths if drag_paths else src_tab.selected_paths()
+                paths = [p for p in raw_paths if os.path.exists(p)]
                 if paths:
                     self.app.transfer_files_tk(paths, target_tab.current_path)
+            return "break"
 
-        def _on_right_click(self, event) -> None:
+        def _copy_paths_clipboard_tk(self, items: List[str]) -> None:
+            text = "\n".join(items)
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self.update_idletasks()
+
+        def _on_right_click(self, event) -> str:
             self.app.set_active_pane(self.pane_idx)
-            paths = self.selected_paths()
+            clicked_iid = self.tree.identify_row(event.y)
+            current_sel = set(self.tree.selection())
+            if clicked_iid and clicked_iid != "..parent..":
+                if clicked_iid not in current_sel:
+                    self.tree.selection_set([clicked_iid])
+                self.tree.focus(clicked_iid)
+            elif current_sel:
+                self.tree.selection_set([])
+
+            paths = list(self.selected_paths())
             menu = tk.Menu(self, tearoff=0)
             if len(paths) == 1 and os.path.isdir(paths[0]):
-                menu.add_command(label="➕ 새 탭에서 폴더 열기", command=lambda: self.app.add_tab(self.pane_idx, paths[0]))
+                target_folder = paths[0]
+                menu.add_command(
+                    label="➕ 새 탭에서 폴더 열기",
+                    command=lambda p=target_folder: self.app.add_tab(self.pane_idx, p),
+                )
             if paths:
-                menu.add_command(label="🗜️ 선택 항목 ZIP 압축하기", command=lambda: self._compress_paths_tk(paths))
+                menu.add_command(
+                    label="🗜️ 선택 항목 ZIP 압축하기",
+                    command=lambda s=list(paths): self._compress_paths_tk(s),
+                )
                 if len(paths) == 1 and is_archive_file(paths[0]):
-                    menu.add_command(label="📂 하위 폴더에 압축 풀기", command=lambda: self._extract_path_tk(paths[0], True))
-                    menu.add_command(label="📥 여기에 바로 압축 풀기", command=lambda: self._extract_path_tk(paths[0], False))
+                    arc_file = paths[0]
+                    menu.add_command(
+                        label="📂 하위 폴더에 압축 풀기",
+                        command=lambda p=arc_file: self._extract_path_tk(p, True),
+                    )
+                    menu.add_command(
+                        label="📥 여기에 바로 압축 풀기",
+                        command=lambda p=arc_file: self._extract_path_tk(p, False),
+                    )
                 menu.add_separator()
                 for i in range(4):
                     dest = self.app.get_pane_current_path(i)
                     menu.add_command(
                         label=f"📑 [{i+1}번 창]으로 복사 ({Path(dest).name or dest})",
-                        command=lambda d=dest: self.app.transfer_files_tk(paths, d, "copy"),
+                        command=lambda s=list(paths), d=dest: self.app.transfer_files_tk(s, d, "copy"),
                     )
                     menu.add_command(
                         label=f"📦 [{i+1}번 창]으로 이동 ({Path(dest).name or dest})",
-                        command=lambda d=dest: self.app.transfer_files_tk(paths, d, "move"),
+                        command=lambda s=list(paths), d=dest: self.app.transfer_files_tk(s, d, "move"),
                     )
                 menu.add_separator()
-                menu.add_command(label="🗑️ 선택 항목 삭제", command=lambda: self._delete_paths(paths))
+                menu.add_command(
+                    label="🗑️ 선택 항목 삭제",
+                    command=lambda s=list(paths): self._delete_paths(s),
+                )
             menu.add_separator()
+            copy_label = (
+                f"🔗 선택 경로 {len(paths)}개 복사 (줄바꿈)"
+                if len(paths) > 1
+                else "🔗 현재/선택 경로 복사"
+            )
+            menu.add_command(
+                label=copy_label,
+                command=lambda s=list(paths), curr=self.current_path: self._copy_paths_clipboard_tk(
+                    s if s else [curr]
+                ),
+            )
             menu.add_command(label="📁 새 폴더 만들기", command=self._new_folder)
             menu.tk_popup(event.x_root, event.y_root)
+            return "break"
 
         def _compress_paths_tk(self, paths: List[str]) -> None:
             stem = Path(paths[0]).stem if len(paths) == 1 else (Path(self.current_path).name or "Archive")
@@ -7168,7 +8065,7 @@ def run_tkinter_app() -> None:
         def __init__(self) -> None:
             self._is_initializing = True
             self.root = tk.Tk()
-            self.root.title("Q-Dir Desktop Explorer v3.1.1 (Tkinter Engine)")
+            self.root.title("Q-Dir Desktop Explorer v3.2.0 (Tkinter Engine)")
             self.root.geometry("1440x880")
             self.root.minsize(320, 420)
 
@@ -7275,6 +8172,14 @@ def run_tkinter_app() -> None:
             mb_drive.pack(side=tk.LEFT, padx=3)
 
             ttk.Button(top_bar, text="🎨 색상 필터 토글", command=self._toggle_color).pack(side=tk.LEFT, padx=6)
+
+            mb_tools = ttk.Menubutton(top_bar, text="🧰 도구 ▾")
+            m_tools = tk.Menu(mb_tools, tearoff=0)
+            m_tools.add_command(label="📊 현재 창 폴더 실제 용량 계산", command=self._tk_calc_folder_sizes)
+            m_tools.add_command(label="🔐 선택 파일 SHA-256 해시 확인", command=self._tk_show_hashes)
+            m_tools.add_command(label="📤 현재 파일 목록 CSV 내보내기", command=self._tk_export_csv)
+            mb_tools["menu"] = m_tools
+            mb_tools.pack(side=tk.LEFT, padx=3)
 
             self.fav_bar = ttk.Frame(self.root)
             self.fav_bar.pack(fill=tk.X, padx=4, pady=2)
@@ -7396,6 +8301,64 @@ def run_tkinter_app() -> None:
                 self.favorites.append({"name": name, "path": path_str})
                 self._rebuild_fav_bar()
 
+        def _active_tk_tab(self) -> Optional[TkDirectoryTab]:
+            if 0 <= self.active_pane_idx < len(self.notebooks):
+                nb = self.notebooks[self.active_pane_idx]
+                sel = nb.select()
+                if sel:
+                    w = nb.nametowidget(sel)
+                    if isinstance(w, TkDirectoryTab):
+                        return w
+            return None
+
+        def _tk_calc_folder_sizes(self) -> None:
+            tab = self._active_tk_tab()
+            if tab is None:
+                return
+            try:
+                from pyquaddir_addons import calculate_immediate_subfolders_sizes, format_bytes
+                sizes = calculate_immediate_subfolders_sizes(tab.current_path)
+                for folder_path, summary in sizes.items():
+                    if folder_path in tab.tree.get_children():
+                        vals = list(tab.tree.item(folder_path, "values"))
+                        if len(vals) >= 2:
+                            vals[1] = f"{summary.formatted_size} ({summary.file_count}파일)"
+                            tab.tree.item(folder_path, values=vals)
+                total_b = sum(s.total_bytes for s in sizes.values())
+                tab.summary_var.set(f"📊 폴더 {len(sizes)}개 실용량 합계: {format_bytes(total_b)}")
+            except Exception as exc:
+                messagebox.showwarning("폴더 용량 계산 오류", str(exc))
+
+        def _tk_show_hashes(self) -> None:
+            tab = self._active_tk_tab()
+            if tab is None:
+                return
+            sel = [p for p in tab.selected_paths() if os.path.isfile(p)]
+            if not sel:
+                messagebox.showinfo("파일 해시 확인", "먼저 해시를 계산할 파일을 선택하세요.")
+                return
+            try:
+                from pyquaddir_addons import compute_file_hashes
+                recs = [compute_file_hashes(path) for path in sel[:10]]
+                lines = [f"{r.file_name}\n  SHA-256: {r.sha256}\n  MD5:     {r.md5}" for r in recs]
+                messagebox.showinfo("파일 해시 (SHA-256 / MD5)", "\n\n".join(lines))
+            except Exception as exc:
+                messagebox.showwarning("해시 계산 오류", str(exc))
+
+        def _tk_export_csv(self) -> None:
+            tab = self._active_tk_tab()
+            if tab is None:
+                return
+            try:
+                from pyquaddir_addons import ExportFormat, ExportOptions, export_file_list_safe
+                stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                out_csv = os.path.join(tab.current_path, f"file_list_{stamp}.csv")
+                export_file_list_safe(tab.current_path, out_csv, ExportOptions(fmt=ExportFormat.CSV))
+                tab.refresh()
+                messagebox.showinfo("목록 내보내기 완료", f"CSV 파일로 저장했습니다:\n{out_csv}")
+            except Exception as exc:
+                messagebox.showwarning("내보내기 오류", str(exc))
+
         def _toggle_color(self) -> None:
             self.color_filter_enabled = not self.color_filter_enabled
             self.refresh_all()
@@ -7420,12 +8383,38 @@ def run_tkinter_app() -> None:
                     return
                 mode = "copy" if ans else "move"
 
-            dest = Path(safe_norm_path(dest_dir))
-            for s in src_paths:
-                src = Path(safe_norm_path(s))
+            dest_norm = safe_norm_path(dest_dir)
+            dest = Path(dest_norm)
+            if not dest.exists() or not dest.is_dir():
+                return
+            seen_sources: set[str] = set()
+            for raw_s in list(src_paths):
+                if not raw_s:
+                    continue
+                src_norm = safe_norm_path(str(raw_s))
+                norm_key = os.path.normcase(src_norm)
+                if norm_key in seen_sources:
+                    continue
+                seen_sources.add(norm_key)
+                src = Path(src_norm)
                 if not src.exists():
                     continue
-                target = get_unique_target_path(dest, src.name)
+                try:
+                    if src.is_dir() and os.path.commonpath([src_norm, dest_norm]).lower() == src_norm.lower():
+                        messagebox.showwarning(
+                            "파일 작업 오류",
+                            f"폴더를 자기 자신의 하위 폴더로 {('이동' if mode == 'move' else '복사')}할 수 없습니다: {src.name}",
+                        )
+                        continue
+                except Exception:
+                    pass
+                direct_target = safe_norm_path(str(dest / src.name))
+                if src_norm.lower() == direct_target.lower():
+                    if mode == "move":
+                        continue
+                    target = get_unique_target_path(dest, f"{src.stem} - 복사본{src.suffix}")
+                else:
+                    target = get_unique_target_path(dest, src.name)
                 try:
                     if mode == "move":
                         shutil.move(str(src), str(target))
@@ -7455,7 +8444,7 @@ def run_tkinter_app() -> None:
 def parse_cli_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="q_dir.py",
-        description="Q-Dir Desktop Explorer v3.1.1 (Quad-View File Manager for Windows)",
+        description="Q-Dir Desktop Explorer v3.2.0 (Quad-View File Manager for Windows)",
         add_help=True,
     )
     parser.add_argument(

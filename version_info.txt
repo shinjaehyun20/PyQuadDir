@@ -1,0 +1,29 @@
+# UTF-8
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(3, 2, 0, 0),
+    prodvers=(3, 2, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+      StringTable(
+        '041204B0',
+        [StringStruct('CompanyName', 'PyQuadDir Open Source Project'),
+        StringStruct('FileDescription', 'PyQuadDir v3.2.0.0 4분할 다중 탭 파일 탐색기'),
+        StringStruct('FileVersion', '3.2.0.0'),
+        StringStruct('InternalName', 'PyQuadDir'),
+        StringStruct('LegalCopyright', 'MIT License — Open Source Desktop Utility'),
+        StringStruct('OriginalFilename', 'PyQuadDir.exe'),
+        StringStruct('ProductName', 'PyQuadDir Desktop Explorer'),
+        StringStruct('ProductVersion', '3.2.0.0')])
+      ]),
+    VarFileInfo([VarStruct('Translation', [1042, 1200])])
+  ]
+)

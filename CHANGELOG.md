@@ -4,6 +4,37 @@ All notable changes to the PyQuadDir project are documented in this file.
 
 ---
 
+## [v3.2.0] - 2026-11-17
+
+### Fixed
+- **Multi-File Move & Drag Selection Preservation (`FileTableView`, `FileIconListView`, `TkDirectoryTab`)**:
+  - Replaced selection-clearing `setCurrentIndex(idx)` / `setCurrentItem(item)` calls on already-selected items with `QItemSelectionModel.SelectionFlag.NoUpdate` and pre-drag immutable `_drag_paths` snapshots across Details, Content, Tiles, Icons, and List views.
+  - Preserved multi-selection on right-click context menus, copied all selected paths (`\n`-joined) on path copy, avoided self-folder drop traps when dropping onto a selected folder, and returned `"break"` on Tkinter `<ButtonPress-1>` multi-item drags.
+- **Address Bar Paste & `Enter` Navigation (`AddressLineEdit`, `normalize_user_input_path`, `navigate_to`)**:
+  - Consumed `Key_Return` / `Key_Enter` inside `AddressLineEdit` so `QDirMainWindow.keyPressEvent` no longer activates row 0 (`..` parent directory) after focus shifts to the file list.
+  - Initialized default focus index to the first non-parent entry (`NoUpdate`) on refresh/focus-in.
+  - Stripped quotes, newlines, trailing slashes, `file:///` URIs, and Windows Properties Unicode bidi/zero-width control characters (`\u202a`–`\u202e`, `\u200b`, `\ufeff`); pasting a file path navigates to its leaf parent directory and highlights the file without unexpectedly launching external executables.
+
+### Added
+- **Clean-Room REA Explorer Power Tools (`pyquaddir_addons.py` + `🧰 도구 ▾`)**:
+  - **Multi-Rename Tool (`Ctrl+M` / multi-select `F2` / Undo `Ctrl+Shift+Z`)**: Prefix/suffix, regex/plain find-replace, `[N]` sequence counter, case/extension transforms, live preview, collision/ADS/reserved-name blocking, and 2-phase UUID staging with 1-click Undo.
+  - **Compare & Sync Panes (`Shift+F2`)**: Side-by-side comparison across panes 1–4 by name, size, timestamp, and optional SHA-256 with non-overwriting selective sync copy.
+  - **Folder Occupied Size Calculation (`Alt+Shift+Enter`)**: On-demand recursive directory byte/file count calculation rendered directly in `<DIR>` size cells and status summary.
+  - **File Checksum & 3-Stage Duplicate Finder (`Ctrl+Shift+H`)**: MD5 / SHA-1 / SHA-256 calculation, clipboard hash verification, and size -> edge-hash -> full SHA-256 duplicate group detection (zero auto-delete).
+  - **Export File List (`Ctrl+Shift+E`), Flat View (`Ctrl+B`), Tab Duplicate/Lock (`Ctrl+Shift+K` / `Ctrl+Shift+L`), and Quick Palette (`Ctrl+P`)**.
+
+### Integration fixes and limits
+- Guard the original Qt close/rename slots so tab-close signals respect locks and F2/the toolbar route multiple selections to batch rename.
+- Protect all ancestor directories during add-on writes on Windows; reject junctions and keep destination files exclusive during selective copy. Failed copies delete only their own open file handle.
+- Use full Windows file identities when excluding hard links from size and duplicate calculations.
+- Add native Qt drag/drop and write-safety regressions; keep the archive core unchanged.
+- Add-on writes require Windows. Recursive scans and hashes currently run synchronously; source publication does not publish a new downloadable executable.
+- Match installation requirements and the packager to the actual PyQt6 engine; document supported `--engine qt` / `--engine tk` options and keep the Windows version resource in source control.
+- Restrict only PyInstaller's child-process PATH to Windows and Python directories, preventing unrelated ICU DLLs from entering the executable. Keep the caller's environment and system-runtime policy unchanged.
+- Unregister mock GUI exit callbacks before resetting test profiles, so interpreter shutdown cannot save test folders into a user's settings.
+
+---
+
 ## [v3.1.1] - 2026-11-05
 
 ### Fixed

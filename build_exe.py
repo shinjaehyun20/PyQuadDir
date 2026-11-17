@@ -7,7 +7,7 @@ PyQuadDir Desktop Explorer — PyInstaller 단일 실행 파일(.exe) 자동 빌
 자동 패키징합니다.
 
 주요 기능:
-1. 필수 빌드 패키지(`PySide6` 또는 `PyQt6`, `pyinstaller`) 설치 여부 확인 및 자동 설치
+1. 필수 빌드 패키지(`PyQt6`, `pyinstaller`) 설치 여부 확인 및 자동 설치
 2. 외부 이미지 없이 순수 Python 바이너리 생성기로 4분할 PyQuadDir 전용 아이콘(`pyquaddir.ico`) 자동 생성
 3. Windows 실행 파일 상세 속성(`version_info.txt`: 파일 설명, 버전, 저작권 메타데이터) 자동 생성
 4. PyInstaller `--onefile --windowed` 최적화 옵션 실행 및 완료 후 `dist` 폴더 자동 열기
@@ -32,7 +32,7 @@ from typing import List
 
 
 APP_NAME = "PyQuadDir"
-APP_VERSION = (3, 1, 1, 0)  # README/CHANGELOG release contract: v3.1.1
+APP_VERSION = (3, 2, 0, 0)  # README/CHANGELOG release contract: v3.2.0
 SOURCE_SCRIPT = "pyquaddir.py"
 ICON_FILE = "pyquaddir.ico"
 VERSION_FILE = "version_info.txt"
@@ -205,18 +205,39 @@ def ensure_frozen_safe_source(script_path: Path) -> None:
 # 4. 필수 패키지 점검 및 PyInstaller 빌드 실행
 # ---------------------------------------------------------------------------
 def detect_installed_qt() -> str:
-    if importlib.util.find_spec("PySide6") is not None:
-        return "PySide6"
     if importlib.util.find_spec("PyQt6") is not None:
         return "PyQt6"
     return ""
+
+
+def packaging_environment() -> dict:
+    """Resolve Windows DLLs against Python and Windows, not host-tool PATHs."""
+    env = os.environ.copy()
+    if platform.system() != "Windows":
+        return env
+    windows = Path(env.get("SystemRoot") or env.get("WINDIR") or "C:/Windows")
+    system32 = windows / "System32"
+    if not (system32 / "kernel32.dll").is_file():
+        raise RuntimeError("Windows system directory could not be verified for packaging")
+    candidates = [system32, windows]
+    for prefix in (Path(sys.executable).parent, Path(sys.prefix), Path(sys.base_prefix)):
+        candidates.extend((prefix, prefix / "Scripts"))
+    search_dirs = []
+    seen = set()
+    for directory in candidates:
+        key = os.path.normcase(str(directory))
+        if key not in seen and directory.is_dir():
+            search_dirs.append(str(directory))
+            seen.add(key)
+    env["PATH"] = os.pathsep.join(search_dirs)
+    return env
 
 
 def ensure_build_dependencies(skip_install: bool = False) -> str:
     qt_pkg = detect_installed_qt()
     missing: List[str] = []
     if not qt_pkg:
-        missing.append("PySide6")
+        missing.append("PyQt6")
     if importlib.util.find_spec("PyInstaller") is None:
         missing.append("pyinstaller")
 
@@ -226,11 +247,11 @@ def ensure_build_dependencies(skip_install: bool = False) -> str:
 
     if skip_install:
         print(f"[!] 미설치 패키지 감지: {', '.join(missing)} (--skip-install 모드)")
-        return qt_pkg or "PySide6"
+        return qt_pkg or "PyQt6"
 
     print(f"[*] 빌드에 필요한 패키지를 설치합니다: {', '.join(missing)}")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", *missing])
-    return detect_installed_qt() or "PySide6"
+    return detect_installed_qt() or "PyQt6"
 
 
 def build_pyinstaller_command(
@@ -253,6 +274,8 @@ def build_pyinstaller_command(
         f"--hidden-import={qt_pkg}.QtCore",
         f"--hidden-import={qt_pkg}.QtGui",
         f"--hidden-import={qt_pkg}.QtWidgets",
+        "--hidden-import=archive_safe_core",
+        "--hidden-import=pyquaddir_addons",
         "--hidden-import=tkinter",
         "--hidden-import=tkinter.ttk",
         "--hidden-import=tkinter.messagebox",
@@ -339,7 +362,7 @@ def main() -> int:
     print(f"[✓] Windows 버전 리소스 파일 생성 완료: {version_path.name}")
 
     # 3. 명령어 조합
-    qt_pkg = detect_installed_qt() or "PySide6"
+    qt_pkg = detect_installed_qt() or "PyQt6"
     cmd = build_pyinstaller_command(
         script_path=script_path,
         icon_path=icon_path,
@@ -372,7 +395,7 @@ def main() -> int:
         # Analysis output before PYZ/EXE. No module exclusion or binary surgery.
         spec_cmd = [sys.executable, "-m", "PyInstaller.utils.cliutils.makespec"]
         spec_cmd += [x for x in cmd[3:] if x not in ("--noconfirm", "--clean")]
-        subprocess.run(spec_cmd, cwd=str(base_dir), check=True)
+        subprocess.run(spec_cmd, cwd=str(base_dir), check=True, env=packaging_environment())
         spec_path = base_dir / f"{APP_NAME}.spec"
         spec = spec_path.read_text(encoding="utf-8")
         marker = "pyz = PYZ("
@@ -409,7 +432,7 @@ def main() -> int:
     print("    명령어:", " ".join(cmd))
     print("-" * 68)
 
-    result = subprocess.run(cmd, cwd=str(base_dir))
+    result = subprocess.run(cmd, cwd=str(base_dir), env=packaging_environment())
     if result.returncode != 0:
         print(f"\n[!] 빌드 중 오류가 발생했습니다 (종료 코드: {result.returncode}).")
         return result.returncode
